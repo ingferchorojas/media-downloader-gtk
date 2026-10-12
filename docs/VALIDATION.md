@@ -9,7 +9,7 @@ no host packages or global system settings were changed.
 
 - C11 compilation in debug, optimized release and ASan/UBSan configurations,
   with project warnings treated as errors.
-- 19 GLib unit tests, including metadata, playlists, container compatibility,
+- 20 GLib unit tests, including metadata, playlists, container compatibility,
   fallback/silent formats, speed units, monotonic progress across revised estimates,
   track changes and processing, queue states, retries,
   subprocess success/failure/cancellation, descendant cleanup after parent exit,
@@ -112,3 +112,20 @@ with formats `270+140-0`. All 299 recorded progress notifications were
 nondecreasing, beginning at 0% and reaching 100% only on successful completion.
 ffprobe confirmed both video and audio streams. Test output is kept in the
 ignored `.tools/progress-video-test/verified/` directory.
+
+## Original audio language regression
+
+Owner-provided video `wHTkk8an2I0` (TOP GUN MAVERICK: Supera a la Original?)
+exposes English (US) tracks with `language_preference=-1` and original/default
+Spanish (US) tracks with `language_preference=10`. Its English Opus track has a
+higher bitrate than its Spanish Opus track, reproducing the previous selector's
+wrong-language choice for MKV. The parser now preserves language and extractor
+preference; the selector compares language preference before audio quality.
+A regression test covers MKV, MP4, MP3 and FLAC, including fallback quality
+ranking when preferences are equal. The format hint displays the audio language.
+The corrected production manager downloaded this video as MKV with selector
+`616+140-1`. One initial audio request returned HTTP 403; retrying completed
+successfully, reusing the already downloaded video track. ffprobe confirmed both
+streams. SHA-256 hashes of the copied audio packet payloads in the final MKV and
+a separate download of the original Spanish `140-1` track match exactly.
+The test files remain in ignored `.tools/audio-language-test/`.

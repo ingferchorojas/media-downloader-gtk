@@ -81,6 +81,35 @@ static void fragment_progress(void) {
     md_progress_clear(&p);
     md_manager_free(m);
 }
+static void original_audio(void) {
+    g_autoptr(MdVideo) v = md_video_parse(
+        "{\"title\":\"Languages\",\"formats\":["
+        "{\"format_id\":\"v\",\"ext\":\"mp4\",\"height\":1080,\"vcodec\":\"avc1\",\"acodec\":"
+        "\"none\"},"
+        "{\"format_id\":\"en\",\"ext\":\"m4a\",\"vcodec\":\"none\",\"acodec\":\"mp4a\","
+        "\"language\":\"en-US\",\"language_preference\":-1,\"tbr\":200},"
+        "{\"format_id\":\"es-low\",\"ext\":\"m4a\",\"vcodec\":\"none\",\"acodec\":\"mp4a\","
+        "\"language\":\"es-US\",\"language_preference\":10,\"tbr\":48},"
+        "{\"format_id\":\"es\",\"ext\":\"m4a\",\"vcodec\":\"none\",\"acodec\":\"mp4a\","
+        "\"language\":\"es-US\",\"language_preference\":10,\"tbr\":128}]}",
+        NULL);
+    g_assert_nonnull(v);
+    MdFormat *f = g_ptr_array_index(v->formats, 3);
+    g_assert_cmpstr(f->language, ==, "es-US");
+    g_assert_cmpfloat(f->language_preference, ==, 10);
+    const gchar *containers[] = {"mkv", "mp4", "mp3", "flac"};
+    for (guint i = 0; i < G_N_ELEMENTS(containers); i++) {
+        g_autoptr(MdSelection) selection = md_select_format(v, containers[i], 0, NULL);
+        g_assert_nonnull(selection);
+        g_assert_cmpstr(selection->selector, ==, i < 2 ? "v+es" : "es");
+        g_assert_cmpstr(selection->audio_language, ==, "es-US");
+    }
+    /* Equal preferences preserve the existing quality ranking. */
+    f->language_preference = -1;
+    ((MdFormat *)g_ptr_array_index(v->formats, 2))->language_preference = -1;
+    g_autoptr(MdSelection) fallback = md_select_format(v, "mkv", 0, NULL);
+    g_assert_cmpstr(fallback->selector, ==, "v+en");
+}
 static void urls(void) {
     g_assert_true(md_url_valid("https://example.com/a?x=1"));
     g_assert_false(md_url_valid("file:///etc/passwd"));
@@ -400,6 +429,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/utils/url", urls);
     g_test_add_func("/utils/units", units);
     g_test_add_func("/metadata/formats", metadata);
+    g_test_add_func("/formats/original-audio", original_audio);
     g_test_add_func("/formats/fallback-and-silent", format_fallback);
     g_test_add_func("/metadata/playlist", playlist);
     g_test_add_func("/errors/messages", errors);

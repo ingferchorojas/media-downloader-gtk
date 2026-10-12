@@ -85,8 +85,14 @@ static void update_selection(Window *w) {
         g_autoptr(GError) error = NULL;
         g_autoptr(MdSelection) s =
             md_select_format(w->video, selected_container(w), selected_height(w), &error);
-        gtk_label_set_text(GTK_LABEL(w->hint),
-                           s ? md_processing_name(s->processing) : error->message);
+        g_autofree gchar *hint =
+            s && s->audio_language
+                ? g_strdup_printf("%s · Idioma del audio: %s", md_processing_name(s->processing),
+                                  s->audio_language)
+                : NULL;
+        gtk_label_set_text(GTK_LABEL(w->hint), hint ? hint
+                                               : s  ? md_processing_name(s->processing)
+                                                    : error->message);
         ready = s != NULL;
         if (ready && s->audio && !md_audio_conversion_supported(s->container)) {
             gtk_label_set_text(GTK_LABEL(w->hint),

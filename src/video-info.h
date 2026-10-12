@@ -1,9 +1,9 @@
 #pragma once
 #include <json-glib/json-glib.h>
 typedef struct {
-    gchar *id, *ext, *vcodec, *acodec;
+    gchar *id, *ext, *vcodec, *acodec, *language;
     gint height;
-    gdouble bitrate;
+    gdouble bitrate, language_preference;
     gboolean drm;
 } MdFormat;
 typedef struct _MdVideo {

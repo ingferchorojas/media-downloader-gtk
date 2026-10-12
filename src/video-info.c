@@ -23,6 +23,7 @@ static void format_free(gpointer data) {
     g_free(f->ext);
     g_free(f->vcodec);
     g_free(f->acodec);
+    g_free(f->language);
     g_free(f);
 }
 void md_video_free(MdVideo *v) {
@@ -78,6 +79,8 @@ MdVideo *md_video_from_object(JsonObject *obj, GError **error) {
             gdouble height = md_json_number(o, "height", 0);
             f->height = height > 0 && height < 20000 ? (gint)height : 0;
             f->bitrate = md_json_number(o, "tbr", 0);
+            f->language = g_strdup(md_json_string(o, "language"));
+            f->language_preference = md_json_number(o, "language_preference", -1);
             JsonNode *drm = json_object_get_member(o, "has_drm");
             f->drm = drm && JSON_NODE_HOLDS_VALUE(drm) &&
                      json_node_get_value_type(drm) == G_TYPE_BOOLEAN && json_node_get_boolean(drm);

@@ -102,6 +102,10 @@ count while their byte total remains estimated, including initialization fragmen
 Downloads occupy 95% of the bar; processing retains
 that progress until successful completion reaches 100%. Per-track sizes remain visible.
 Unknown values are shown as `—`. Cancellation preserves partial files for retries.
+Audio selection respects yt-dlp’s original/default language preference before
+comparing bitrate. When provided by the source, the selected audio language is
+shown beside the format selection. If language metadata is unavailable, quality
+ranking is used.
 Filenames retain spaces and Unicode; yt-dlp still sanitizes characters that cannot
 be used in file paths. Existing output files are not overwritten. Removing a row never deletes files.
 Closing the main window cancels running jobs and waits for process cleanup.

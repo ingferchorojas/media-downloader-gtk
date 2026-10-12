@@ -2,6 +2,24 @@
 static gboolean codec(const gchar *s) {
     return !s || (*s && !g_str_equal(s, "none"));
 }
+static gboolean better_audio(MdFormat *candidate, MdFormat *current) {
+    if (!current)
+        return TRUE;
+    /* Respect the extractor's original/default language before ranking quality. */
+    if (candidate->language_preference != current->language_preference)
+        return candidate->language_preference > current->language_preference;
+    if (codec(candidate->vcodec) != codec(current->vcodec))
+        return !codec(candidate->vcodec);
+    return candidate->bitrate > current->bitrate;
+}
+static gboolean better_video(MdFormat *candidate, MdFormat *current) {
+    if (!current || candidate->height != current->height)
+        return !current || candidate->height > current->height;
+    if (codec(candidate->acodec) && codec(current->acodec) &&
+        candidate->language_preference != current->language_preference)
+        return candidate->language_preference > current->language_preference;
+    return candidate->bitrate > current->bitrate;
+}
 static gboolean prefix(const gchar *s, const gchar *p) {
     return s && g_str_has_prefix(s, p);
 }
@@ -28,6 +46,7 @@ void md_selection_free(MdSelection *s) {
     if (s) {
         g_free(s->selector);
         g_free(s->container);
+        g_free(s->audio_language);
         g_free(s);
     }
 }
@@ -65,16 +84,12 @@ MdSelection *md_select_format(MdVideo *v, const gchar *container, gint height, G
         if (f->drm)
             continue;
         if (audio) {
-            if (codec(f->acodec) &&
-                (!sound || (!codec(f->vcodec) && codec(sound->vcodec)) ||
-                 (codec(f->vcodec) == codec(sound->vcodec) && f->bitrate > sound->bitrate)))
+            if (codec(f->acodec) && better_audio(f, sound))
                 sound = f;
         } else if (compatible(f, container)) {
-            if (codec(f->vcodec) && (!height || f->height == height) &&
-                (!video || f->height > video->height ||
-                 (f->height == video->height && f->bitrate > video->bitrate)))
+            if (codec(f->vcodec) && (!height || f->height == height) && better_video(f, video))
                 video = f;
-            if (!codec(f->vcodec) && codec(f->acodec) && (!sound || f->bitrate > sound->bitrate))
+            if (!codec(f->vcodec) && codec(f->acodec) && better_audio(f, sound))
                 sound = f;
         }
     }
@@ -85,9 +100,7 @@ MdSelection *md_select_format(MdVideo *v, const gchar *container, gint height, G
         for (guint i = 0; i < v->formats->len; i++) {
             MdFormat *f = g_ptr_array_index(v->formats, i);
             if (!f->drm && compatible(f, container) && codec(f->vcodec) && codec(f->acodec) &&
-                (!height || f->height == height) &&
-                (!video || f->height > video->height ||
-                 (f->height == video->height && f->bitrate > video->bitrate)))
+                (!height || f->height == height) && better_video(f, video))
                 video = f;
         }
     }
@@ -107,6 +120,8 @@ MdSelection *md_select_format(MdVideo *v, const gchar *container, gint height, G
         s->selector = g_strdup_printf("%s+%s", video->id, sound->id);
         s->processing = MD_MERGE;
     }
+    MdFormat *audio_format = audio || !codec(video->acodec) ? sound : video;
+    s->audio_language = audio_format ? g_strdup(audio_format->language) : NULL;
     return s;
 unavailable:
     g_set_error_literal(

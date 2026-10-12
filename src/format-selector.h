@@ -2,7 +2,7 @@
 #include "video-info.h"
 typedef enum { MD_DIRECT, MD_MERGE, MD_CONVERT } MdProcessing;
 typedef struct {
-    gchar *selector, *container;
+    gchar *selector, *container, *audio_language;
     gboolean audio;
     MdProcessing processing;
 } MdSelection;

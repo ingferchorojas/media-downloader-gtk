@@ -154,7 +154,7 @@ static void job_changed(MdJob *j, gpointer data) {
         g_autofree gchar *text = g_strdup_printf("%.1f %%", 100 * j->fraction);
         gtk_progress_bar_set_text(GTK_PROGRESS_BAR(r->progress), text);
     } else {
-        gtk_progress_bar_pulse(GTK_PROGRESS_BAR(r->progress));
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(r->progress), 0);
         gtk_progress_bar_set_text(GTK_PROGRESS_BAR(r->progress), md_state_name(j->state));
     }
     gtk_widget_set_sensitive(r->cancel, !md_state_terminal(j->state));
@@ -646,7 +646,7 @@ static void about_clicked(GtkButton *b, gpointer data) {
     gtk_show_about_dialog(
         GTK_WINDOW(w->window), "program-name", "Media Downloader", "version", MD_APP_VERSION,
         "copyright", "© 2026 Fernando Rojas", "license-type", GTK_LICENSE_MIT_X11, "logo-icon-name",
-        "media-downloader-gtk", "comments",
+        "io.github.fernandorojas.MediaDownloader", "comments",
         "Interfaz nativa para yt-dlp y FFmpeg. Descarga únicamente contenido autorizado.", NULL);
 }
 static gboolean await_close(gpointer data) {
@@ -863,6 +863,7 @@ void md_window_present(GtkApplication *application) {
     GtkCssProvider *css = gtk_css_provider_new();
     gtk_css_provider_load_from_resource(
         css, "/io/github/fernandorojas/MediaDownloader/styles/style.css");
+    gtk_window_set_icon_name(GTK_WINDOW(w->window), "io.github.fernandorojas.MediaDownloader");
     gtk_icon_theme_add_resource_path(
         gtk_icon_theme_get_for_display(gtk_widget_get_display(w->window)),
         "/io/github/fernandorojas/MediaDownloader/icons");

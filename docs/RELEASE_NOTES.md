@@ -6,6 +6,8 @@ video format selection, audio conversion, structured live progress, a concurrent
 queue, cancellation, retries, playlist selection and local preferences.
 Checks GitHub for newer engine/application releases at startup, offers a verified
 per-user engine update, and preserves spaces in downloaded filenames.
+Includes an original YT icon with matching desktop application identity. Overall
+progress never decreases within an attempt; 100% is reserved for successful completion.
 
 Release artifacts: architecture-specific Debian package and source code.
 

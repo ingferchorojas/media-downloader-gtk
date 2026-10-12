@@ -22,6 +22,7 @@ static void changed(MdJob *j) {
 static void job_free(gpointer data) {
     MdJob *j = data;
     g_assert(!j->process);
+    g_hash_table_unref(j->track_progress);
     g_free(j->url);
     g_free(j->title);
     g_free(j->directory);
@@ -50,6 +51,8 @@ MdJob *md_manager_add(MdManager *m, const gchar *url, const gchar *title, const 
     j->height = height;
     j->cancel = g_cancellable_new();
     j->fraction = -1;
+    j->expected_tracks = 1;
+    j->track_progress = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     g_ptr_array_add(m->jobs, j);
     return j;
 }
@@ -77,24 +80,45 @@ static void process_done(gboolean ok, const gchar *error, gpointer data) {
     j->process = NULL;
     ended(j, ok, detail);
 }
+void md_job_apply_progress(MdJob *j, const MdProgress *p) {
+    if (p->stage) {
+        j->fraction = MAX(j->fraction, 0.95);
+        return;
+    }
+    const gchar *key = p->filename ? p->filename : "download";
+    gdouble *track = g_hash_table_lookup(j->track_progress, key);
+    if (!track) {
+        track = g_new0(gdouble, 1);
+        g_hash_table_insert(j->track_progress, g_strdup(key), track);
+    }
+    if (g_strcmp0(p->status, "finished") == 0)
+        *track = 1;
+    else if (p->total > 0 && p->downloaded >= 0)
+        *track = MAX(*track, CLAMP(p->downloaded / p->total, 0, 1));
+    gdouble sum = 0;
+    GHashTableIter iter;
+    gpointer value;
+    g_hash_table_iter_init(&iter, j->track_progress);
+    while (g_hash_table_iter_next(&iter, NULL, &value))
+        sum += *(gdouble *)value;
+    j->fraction = MAX(j->fraction, MIN(0.95, 0.95 * sum / MAX(1u, j->expected_tracks)));
+}
 static void process_line(const gchar *line, gpointer data) {
     MdJob *j = data;
     MdProgress p;
     if (md_progress_parse(line, &p)) {
+        md_job_apply_progress(j, &p);
         if (p.stage) {
             j->state = g_strrstr(p.stage, "Merger") ? MD_MERGING
                        : (g_strrstr(p.stage, "ExtractAudio") || g_strrstr(p.stage, "Convert"))
                            ? MD_CONVERTING
                            : MD_PROCESSING;
-            j->fraction = -1;
             g_free(j->detail);
             j->detail = g_strdup(j->state == MD_MERGING ? "Combinando las pistas descargadas…"
                                  : j->state == MD_CONVERTING ? "Convirtiendo el archivo multimedia…"
                                                              : "Preparando el archivo final…");
         } else {
             j->state = g_strcmp0(p.status, "finished") == 0 ? MD_PROCESSING : MD_DOWNLOADING;
-            j->fraction =
-                p.total > 0 && p.downloaded >= 0 ? CLAMP(p.downloaded / p.total, 0, 0.99) : -1;
             g_autofree gchar *down = md_size(p.downloaded), *total = md_size(p.total),
                              *speed = md_size(p.speed), *eta = md_duration(p.eta);
             g_autofree gchar *fragments =
@@ -137,6 +161,7 @@ static void metadata_ready(MdVideo *v, const gchar *error, gpointer data) {
     argv[n++] = "yt-dlp";
     argv[n++] = "--ignore-config";
     argv[n++] = "--no-playlist";
+    j->expected_tracks = strchr(s->selector, '+') ? 2 : 1;
     argv[n++] = "--newline";
     argv[n++] = "--progress";
     argv[n++] = "--progress-delta";
@@ -222,6 +247,8 @@ void md_job_retry(MdJob *j) {
     g_clear_pointer(&j->error, g_free);
     g_clear_pointer(&j->detail, g_free);
     j->fraction = -1;
+    g_hash_table_remove_all(j->track_progress);
+    j->expected_tracks = 1;
     j->state = MD_QUEUED;
     changed(j);
     md_manager_schedule(j->manager);

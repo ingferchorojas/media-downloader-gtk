@@ -8,6 +8,45 @@
 #include "preferences.h"
 #include "updates.h"
 #include "engine.h"
+static void monotonic_progress(void) {
+    MdManager *m = md_manager_new(NULL, NULL);
+    MdJob *j = md_manager_add(m, "https://example.com", "test", "/tmp", "mp4", 0);
+    j->expected_tracks = 2;
+    MdProgress p = {.filename = "video", .downloaded = 80, .total = 100};
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.38, 0.00001);
+    p.total = 200;
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.38, 0.00001);
+    p.status = "finished";
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475, 0.00001);
+    p.filename = "audio";
+    p.status = "downloading";
+    p.downloaded = 10;
+    p.total = 100;
+    md_job_apply_progress(j, &p);
+    gdouble previous = j->fraction;
+    p.downloaded = 0;
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->fraction, ==, previous);
+    p.total = -1;
+    p.downloaded = -1;
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->fraction, ==, previous);
+    p.status = "finished";
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.95, 0.00001);
+    p.stage = "Merger";
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->fraction, <, 1);
+    j->state = MD_CANCELLED;
+    m->stopping = TRUE;
+    md_job_retry(j);
+    g_assert_cmpfloat(j->fraction, ==, -1);
+    g_assert_cmpuint(g_hash_table_size(j->track_progress), ==, 0);
+    md_manager_free(m);
+}
 static void urls(void) {
     g_assert_true(md_url_valid("https://example.com/a?x=1"));
     g_assert_false(md_url_valid("file:///etc/passwd"));
@@ -92,10 +131,11 @@ static void progress(void) {
     MdProgress p;
     g_assert_false(md_progress_parse("text", &p));
     g_assert_false(md_progress_parse("MD_PROGRESS:[]", &p));
-    g_assert_true(
-        md_progress_parse("MD_PROGRESS:{\"downloaded_bytes\":135,\"total_bytes_estimate\":200,"
-                          "\"speed\":null,\"eta\":14,\"status\":\"downloading\"}",
-                          &p));
+    g_assert_true(md_progress_parse(
+        "MD_PROGRESS:{\"downloaded_bytes\":135,\"total_bytes_estimate\":200,"
+        "\"filename\":\"track.f140.m4a\",\"speed\":null,\"eta\":14,\"status\":\"downloading\"}",
+        &p));
+    g_assert_cmpstr(p.filename, ==, "track.f140.m4a");
     g_assert_cmpfloat(p.total, ==, 200);
     g_assert_true(p.estimated);
     g_assert_cmpfloat(p.speed, ==, -1);
@@ -330,6 +370,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/metadata/playlist", playlist);
     g_test_add_func("/errors/messages", errors);
     g_test_add_func("/download/progress", progress);
+    g_test_add_func("/download/monotonic", monotonic_progress);
     g_test_add_func("/updates/version-order", versions);
     g_test_add_func("/updates/releases", releases);
     g_test_add_func("/updates/checksums", checksums);

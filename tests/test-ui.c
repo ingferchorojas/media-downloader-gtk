@@ -52,6 +52,11 @@ static gboolean drive(gpointer data) {
         g_error("UI integration timed out at step %u", step);
     GtkWindow *window = gtk_application_get_active_window(app);
     g_assert_nonnull(window);
+    g_assert_cmpstr(gtk_window_get_icon_name(window), ==,
+                    "io.github.fernandorojas.MediaDownloader");
+    g_assert_true(gtk_icon_theme_has_icon(
+        gtk_icon_theme_get_for_display(gtk_widget_get_display(GTK_WIDGET(window))),
+        "io.github.fernandorojas.MediaDownloader"));
     GtkWidget *root = GTK_WIDGET(window);
     if (step == 0) {
         if (g_getenv("MD_UI_UPDATE_ENGINE") && !update_finished) {

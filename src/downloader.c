@@ -253,6 +253,7 @@ gboolean md_progress_parse(const gchar *line, MdProgress *p) {
     p->speed = md_json_number(o, "speed", -1);
     p->eta = md_json_number(o, "eta", -1);
     p->status = g_strdup(md_json_string(o, "status"));
+    p->filename = g_strdup(md_json_string(o, "filename"));
     p->stage = g_strdup(md_json_string(o, "postprocessor"));
     gdouble fragment = md_json_number(o, "fragment_index", 0),
             fragments = md_json_number(o, "fragment_count", 0);
@@ -263,4 +264,5 @@ gboolean md_progress_parse(const gchar *line, MdProgress *p) {
 void md_progress_clear(MdProgress *p) {
     g_free(p->status);
     g_free(p->stage);
+    g_free(p->filename);
 }

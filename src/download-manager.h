@@ -19,6 +19,8 @@ typedef struct {
     gint height;
     MdState state;
     gdouble fraction;
+    GHashTable *track_progress;
+    guint expected_tracks;
     MdProcess *process;
     GCancellable *cancel;
     gpointer ui;
@@ -41,3 +43,5 @@ void md_manager_stop(MdManager *manager);
 void md_manager_free(MdManager *manager);
 const gchar *md_state_name(MdState state);
 gboolean md_state_terminal(MdState state);
+
+void md_job_apply_progress(MdJob *job, const MdProgress *progress);

@@ -6,6 +6,16 @@ static guint updates, processed, finished, expected = 1, max_active;
 static const gchar *mode;
 static void changed(MdJob *j, gpointer data) {
     (void)data;
+    gdouble *previous = g_object_get_data(G_OBJECT(j->cancel), "previous-fraction");
+    if (!previous) {
+        previous = g_new(gdouble, 1);
+        *previous = -1;
+        g_object_set_data_full(G_OBJECT(j->cancel), "previous-fraction", previous, g_free);
+    }
+    g_assert_cmpfloat(j->fraction, >=, *previous);
+    if (j->state != MD_COMPLETED)
+        g_assert_cmpfloat(j->fraction, <, 1);
+    *previous = j->fraction;
     max_active = MAX(max_active, j->manager->active);
     g_assert_cmpuint(j->manager->active, <=, j->manager->limit);
     if (j->state == MD_DOWNLOADING && j->detail) {

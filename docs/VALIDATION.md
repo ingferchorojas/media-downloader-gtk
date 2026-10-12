@@ -9,8 +9,9 @@ no host packages or global system settings were changed.
 
 - C11 compilation in debug, optimized release and ASan/UBSan configurations,
   with project warnings treated as errors.
-- 17 GLib unit tests, including metadata, playlists, container compatibility,
-  fallback/silent formats, speed units, progress, queue states, retries,
+- 18 GLib unit tests, including metadata, playlists, container compatibility,
+  fallback/silent formats, speed units, monotonic progress across revised estimates,
+  track changes and processing, queue states, retries,
   subprocess success/failure/cancellation, descendant cleanup after parent exit,
   readable errors and preference persistence.
 - Real HTTP downloads through yt-dlp of original FFmpeg-generated media:
@@ -24,6 +25,9 @@ no host packages or global system settings were changed.
 - GTK widgets on an isolated Xvfb display with fatal GLib warnings: analysis,
   enabled/disabled controls, downloaded and converted thumbnail, download,
   completion and clean close. The initial screenshot used generated test content.
+- Embedded custom YT icon lookup in the GTK theme and a desktop entry whose
+  basename matches the GtkApplication identifier.
+- Integration callbacks assert nondecreasing progress and reserve 100% for success.
 - Debian package creation, contents inspection and dynamic dependency generation.
 - APT installation in disposable Ubuntu 24.04 containers, desktop-file validation,
   linkage checks, startup as an unprivileged test user, and APT purge with removal

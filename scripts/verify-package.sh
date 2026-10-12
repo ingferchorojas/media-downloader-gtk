@@ -8,7 +8,7 @@ apt-get install -y --no-install-recommends "$package" xvfb dbus-x11 desktop-file
 command -v media-downloader-gtk
 command -v yt-dlp
 command -v ffmpeg
-desktop-file-validate /usr/share/applications/media-downloader-gtk.desktop
+desktop-file-validate /usr/share/applications/io.github.fernandorojas.MediaDownloader.desktop
 ldd /usr/bin/media-downloader-gtk > /tmp/md-linkage.txt
 if grep -q 'not found' /tmp/md-linkage.txt; then cat /tmp/md-linkage.txt; exit 1; fi
 useradd -m md-test
@@ -20,6 +20,6 @@ cat /tmp/md-smoke.log
 [ "$status" -eq 124 ]
 apt-get purge -y media-downloader-gtk
 [ ! -e /usr/bin/media-downloader-gtk ]
-[ ! -e /usr/share/applications/media-downloader-gtk.desktop ]
-[ ! -e /usr/share/icons/hicolor/scalable/apps/media-downloader-gtk.svg ]
+[ ! -e /usr/share/applications/io.github.fernandorojas.MediaDownloader.desktop ]
+[ ! -e /usr/share/icons/hicolor/scalable/apps/io.github.fernandorojas.MediaDownloader.svg ]
 printf '\nAPT installation, non-root GUI startup and removal verified.\n'

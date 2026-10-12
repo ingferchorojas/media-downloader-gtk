@@ -96,8 +96,9 @@ uses those local tools. They are not bundled or required by a normal build.
 4. For playlists, select items and confirm adding them to the queue.
 5. Use the row controls to cancel, retry, open the folder or remove finished rows.
 
-100% is reserved for completed jobs. Track downloads may restart their percentage
-when a new track begins; the display identifies values as the current track.
+Progress accumulates across tracks and never decreases within an attempt, even when
+yt-dlp revises size estimates. Downloads occupy 95% of the bar; processing retains
+that progress until successful completion reaches 100%. Per-track sizes remain visible.
 Unknown values are shown as `—`. Cancellation preserves partial files for retries.
 Filenames retain spaces and Unicode; yt-dlp still sanitizes characters that cannot
 be used in file paths. Existing output files are not overwritten. Removing a row never deletes files.

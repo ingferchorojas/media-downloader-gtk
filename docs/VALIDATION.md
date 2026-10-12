@@ -107,3 +107,8 @@ latched this temporary 100% track estimate at 47.5% overall. A regression test
 now reproduces this event and subsequent changes to the estimate. Fragmented
 downloads use completed fragments whenever the byte total is estimated; the
 existing monotonic accumulator and completion-only 100% remain in effect.
+The corrected production download manager downloaded the complete video as MP4
+with formats `270+140-0`. All 299 recorded progress notifications were
+nondecreasing, beginning at 0% and reaching 100% only on successful completion.
+ffprobe confirmed both video and audio streams. Test output is kept in the
+ignored `.tools/progress-video-test/verified/` directory.

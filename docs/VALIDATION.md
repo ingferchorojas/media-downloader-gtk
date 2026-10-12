@@ -56,6 +56,8 @@ This verifies the supplied video, not every YouTube video or source website.
   it inside an isolated XDG data directory, and used it for subsequent analysis
   and completion of the owner-provided video job. The existing MP3 was preserved.
   Compatible Node 22.23.3 was selected by the actual C engine integration from PATH.
+  A further live test succeeded with the original Node 20 PATH: the app detected
+  the already-installed Node 22.23.3 under NVM without changing the environment.
 - GitHub's actual application endpoint returned no published Releases; the UI
   displayed the corresponding status. Newer application version comparison and
   Release-page validation are covered with deterministic JSON fixtures.

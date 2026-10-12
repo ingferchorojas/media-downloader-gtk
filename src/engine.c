@@ -38,14 +38,44 @@ static gchar *program_output(const gchar *path, const gchar *arg) {
     }
     return out;
 }
+static gboolean supported_node(const gchar *path) {
+    g_autofree gchar *version = program_output(path, "--version");
+    return version && version[0] == 'v' && g_ascii_strtoull(version + 1, NULL, 10) >= 22;
+}
+static gchar *find_node(void) {
+    g_autofree gchar *node = g_find_program_in_path("node");
+    if (node && supported_node(node))
+        return g_steal_pointer(&node);
+    const gchar *configured = g_getenv("NVM_DIR");
+    g_autofree gchar *root = configured && *configured
+                                 ? g_strdup(configured)
+                                 : g_build_filename(g_get_home_dir(), ".nvm", NULL);
+    g_autofree gchar *versions = g_build_filename(root, "versions", "node", NULL);
+    GDir *dir = g_dir_open(versions, 0, NULL);
+    if (!dir)
+        return NULL;
+    const gchar *name;
+    guint checked = 0;
+    gchar *found = NULL;
+    while (checked++ < 64 && (name = g_dir_read_name(dir))) {
+        if (name[0] != 'v' || g_ascii_strtoull(name + 1, NULL, 10) < 22)
+            continue;
+        g_autofree gchar *candidate = g_build_filename(versions, name, "bin", "node", NULL);
+        if (g_file_test(candidate, G_FILE_TEST_IS_REGULAR) && access(candidate, X_OK) == 0 &&
+            supported_node(candidate)) {
+            found = g_steal_pointer(&candidate);
+            break;
+        }
+    }
+    g_dir_close(dir);
+    return found;
+}
 void md_engine_probe_runtime(const gchar *executable) {
     gchar *selected = NULL;
     g_autofree gchar *help = program_output(executable, "--help");
     if (help && strstr(help, "--js-runtimes")) {
-        g_autofree gchar *deno = g_find_program_in_path("deno"),
-                         *node = g_find_program_in_path("node");
+        g_autofree gchar *deno = g_find_program_in_path("deno");
         g_autofree gchar *deno_version = deno ? program_output(deno, "--version") : NULL;
-        g_autofree gchar *node_version = node ? program_output(node, "--version") : NULL;
         if (deno_version) {
             gchar *start = strstr(deno_version, "deno ");
             if (start) {
@@ -56,9 +86,11 @@ void md_engine_probe_runtime(const gchar *executable) {
                     selected = g_strdup_printf("deno:%s", deno);
             }
         }
-        if (!selected && node_version && node_version[0] == 'v' &&
-            g_ascii_strtoull(node_version + 1, NULL, 10) >= 22)
-            selected = g_strdup_printf("node:%s", node);
+        if (!selected) {
+            g_autofree gchar *node = find_node();
+            if (node)
+                selected = g_strdup_printf("node:%s", node);
+        }
     }
     g_mutex_lock(&runtime_lock);
     g_free(runtime);

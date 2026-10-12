@@ -128,7 +128,8 @@ The managed executable lives in
 precedence over the system executable. Python >= 3.10 is needed by the official
 Unix engine; current YouTube support also needs its bundled EJS scripts and a
 supported runtime. The app enables compatible Deno >= 2.3 or Node >= 22 found
-in `PATH` when the selected yt-dlp supports `--js-runtimes`. It does not install
+in `PATH` when the selected yt-dlp supports `--js-runtimes`. It also checks
+already-installed Node versions under NVM if the default Node is too old. It does not install
 JavaScript runtimes. The application and interface remain C11.
 
 **Descargar nueva versión** opens the newer application Release page so the

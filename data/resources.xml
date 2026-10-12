@@ -1,0 +1,6 @@
+<gresources>
+  <gresource prefix="/io/github/fernandorojas/MediaDownloader">
+    <file>styles/style.css</file>
+    <file>icons/media-downloader-gtk.svg</file>
+  </gresource>
+</gresources>

@@ -54,6 +54,12 @@ MdSelection *md_select_format(MdVideo *v, const gchar *container, gint height, G
         !g_str_equal(container, "mkv"))
         goto unavailable;
     MdFormat *video = NULL, *sound = NULL;
+    gboolean has_audio = FALSE;
+    for (guint i = 0; i < v->formats->len; i++) {
+        MdFormat *f = g_ptr_array_index(v->formats, i);
+        if (!f->drm && codec(f->acodec))
+            has_audio = TRUE;
+    }
     for (guint i = 0; i < v->formats->len; i++) {
         MdFormat *f = g_ptr_array_index(v->formats, i);
         if (f->drm)
@@ -74,7 +80,7 @@ MdSelection *md_select_format(MdVideo *v, const gchar *container, gint height, G
     }
     /* A video-only candidate is usable only when a compatible audio track exists.
      * Fall back to a combined format at the requested resolution when it does not. */
-    if (!audio && video && !codec(video->acodec) && !sound) {
+    if (!audio && has_audio && video && !codec(video->acodec) && !sound) {
         video = NULL;
         for (guint i = 0; i < v->formats->len; i++) {
             MdFormat *f = g_ptr_array_index(v->formats, i);
@@ -85,7 +91,7 @@ MdSelection *md_select_format(MdVideo *v, const gchar *container, gint height, G
                 video = f;
         }
     }
-    if ((audio && !sound) || (!audio && (!video || (!codec(video->acodec) && !sound))))
+    if ((audio && !sound) || (!audio && (!video || (has_audio && !codec(video->acodec) && !sound))))
         goto unavailable;
     MdSelection *s = g_new0(MdSelection, 1);
     s->audio = audio;
@@ -94,7 +100,7 @@ MdSelection *md_select_format(MdVideo *v, const gchar *container, gint height, G
         s->selector = g_strdup(sound->id);
         s->processing =
             !codec(sound->vcodec) && g_strcmp0(sound->ext, container) == 0 ? MD_DIRECT : MD_CONVERT;
-    } else if (codec(video->acodec)) {
+    } else if (codec(video->acodec) || !has_audio) {
         s->selector = g_strdup(video->id);
         s->processing = g_strcmp0(video->ext, container) == 0 ? MD_DIRECT : MD_MERGE;
     } else {

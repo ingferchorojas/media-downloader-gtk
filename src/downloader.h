@@ -16,6 +16,7 @@ gboolean md_dependencies_finish(GAsyncResult *result, GError **error);
 gboolean md_audio_conversion_supported(const gchar *container);
 typedef struct {
     gdouble downloaded, total, speed, eta;
+    gboolean estimated;
     gchar *status, *stage;
     gint fragment, fragments;
 } MdProgress;

@@ -101,14 +101,15 @@ static void process_line(const gchar *line, gpointer data) {
                 p.fragments > 0 ? g_strdup_printf(" · Fragmento %d/%d", p.fragment, p.fragments)
                                 : g_strdup("");
             g_free(j->detail);
-            j->detail = g_strdup_printf("Pista actual: %s / %s · %s%s · Restante: %s%s", down,
-                                        total, speed, p.speed >= 0 ? "/s" : "", eta, fragments);
+            j->detail = g_strdup_printf("Pista actual: %s / %s%s · %s%s · Restante: %s%s", down,
+                                        p.estimated ? "≈ " : "", total, speed,
+                                        p.speed >= 0 ? "/s" : "", eta, fragments);
         }
         md_progress_clear(&p);
         changed(j);
     } else if (g_str_has_prefix(line, "ERROR:")) {
         g_free(j->error);
-        j->error = g_strndup(line + 6, 4000);
+        j->error = md_error_message(line + 6);
         changed(j);
     }
 }

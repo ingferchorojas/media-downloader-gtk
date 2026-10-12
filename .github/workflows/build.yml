@@ -1,0 +1,35 @@
+name: Build and test
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential meson ninja-build pkg-config libgtk-4-dev libjson-glib-dev yt-dlp ffmpeg dpkg-dev desktop-file-utils xvfb dbus-x11
+      - run: meson setup build --prefix=/usr --buildtype=release
+      - run: meson compile -C build
+      - run: meson test -C build --print-errorlogs
+      - name: Core memory and undefined behavior checks
+        run: |
+          meson setup build-asan -Db_sanitize=address,undefined -Db_lundef=false
+          meson compile -C build-asan
+          meson test -C build-asan --print-errorlogs
+      - name: Real media integration and GUI tests
+        run: dbus-run-session -- xvfb-run -a env MD_TEST_UI=1 G_DEBUG=fatal-warnings GDK_BACKEND=x11 GSK_RENDERER=cairo python3 tests/run-integration.py
+      - run: scripts/build-deb.sh build
+      - name: Verify APT install, non-root launch and removal
+        run: docker run --rm --init -v "$PWD/dist:/packages:ro" -v "$PWD/scripts/verify-package.sh:/verify-package.sh:ro" ubuntu:24.04 sh /verify-package.sh /packages/media-downloader-gtk_1.0.0-1_amd64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: media-downloader-gtk-deb
+          path: dist/*.deb
+          if-no-files-found: error

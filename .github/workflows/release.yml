@@ -1,0 +1,36 @@
+name: Prepare release draft
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing authorized version tag (v1.0.0)'
+        required: true
+        default: v1.0.0
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Validate tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: test "$RELEASE_TAG" = v1.0.0
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential meson ninja-build pkg-config libgtk-4-dev libjson-glib-dev yt-dlp ffmpeg dpkg-dev
+      - run: meson setup build --prefix=/usr --buildtype=release
+      - run: meson compile -C build && meson test -C build --print-errorlogs
+      - run: python3 tests/run-integration.py
+      - run: scripts/build-deb.sh build
+      - name: Create an unpublished release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release create "$RELEASE_TAG" dist/*.deb --verify-tag --draft --title "Media Downloader $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md

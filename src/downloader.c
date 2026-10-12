@@ -240,8 +240,10 @@ gboolean md_progress_parse(const gchar *line, MdProgress *p) {
     memset(p, 0, sizeof *p);
     p->downloaded = md_json_number(o, "downloaded_bytes", -1);
     p->total = md_json_number(o, "total_bytes", -1);
-    if (p->total <= 0)
+    if (p->total <= 0) {
         p->total = md_json_number(o, "total_bytes_estimate", -1);
+        p->estimated = p->total > 0;
+    }
     p->speed = md_json_number(o, "speed", -1);
     p->eta = md_json_number(o, "eta", -1);
     p->status = g_strdup(md_json_string(o, "status"));

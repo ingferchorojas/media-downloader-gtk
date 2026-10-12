@@ -151,7 +151,7 @@ static void metadata_ready(MdVideo *v, const gchar *error, gpointer data) {
     argv[n++] = "20";
     argv[n++] = "--retries";
     argv[n++] = "3";
-    argv[n++] = "--restrict-filenames";
+    argv[n++] = "--no-restrict-filenames";
     argv[n++] = "-f";
     argv[n++] = s->selector;
     argv[n++] = "-o";

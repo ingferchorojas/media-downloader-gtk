@@ -6,6 +6,8 @@
 #include "utils.h"
 #include "download-manager.h"
 #include "preferences.h"
+#include "updates.h"
+#include "engine.h"
 static void urls(void) {
     g_assert_true(md_url_valid("https://example.com/a?x=1"));
     g_assert_false(md_url_valid("file:///etc/passwd"));
@@ -99,6 +101,104 @@ static void progress(void) {
     g_assert_cmpfloat(p.speed, ==, -1);
     g_assert_cmpfloat(p.eta, ==, 14);
     md_progress_clear(&p);
+}
+static void versions(void) {
+    g_assert_true(md_version_newer("2025.09.05", "2026.08.19"));
+    g_assert_true(md_version_newer("1.9.9", "v1.10.0"));
+    g_assert_false(md_version_newer("v1.10.0", "1.9.9"));
+    g_assert_false(md_version_newer("1.0.0", "v1.0.0"));
+    g_assert_false(md_version_newer("1.0.0", "1.0.1-beta"));
+    g_assert_false(md_version_newer("nightly", "1.0.0"));
+    g_assert_false(md_version_newer("1.0.0", "18446744073709551616.0.0"));
+    g_assert_true(md_version_newer(NULL, "2026.08.19"));
+}
+static void releases(void) {
+    g_autoptr(GError) error = NULL;
+    const gchar *json =
+        "{\"tag_name\":\"v1.2.0\",\"draft\":false,\"prerelease\":false,\"html_url\":\"https://"
+        "github.com/ingferchorojas/media-downloader-gtk/releases/tag/v1.2.0\"}";
+    g_autoptr(MdRelease) r = md_release_parse(json, MD_APP_REPOSITORY, FALSE, &error);
+    g_assert_no_error(error);
+    g_assert_cmpstr(r->version, ==, "1.2.0");
+    g_autoptr(MdRelease) missing = md_release_parse(json, MD_ENGINE_REPOSITORY, TRUE, &error);
+    g_assert_null(missing);
+    g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+    g_clear_error(&error);
+    g_autoptr(MdRelease) foreign =
+        md_release_parse("{\"tag_name\":\"v9.0.0\",\"html_url\":\"https://example.com/download\"}",
+                         MD_APP_REPOSITORY, FALSE, &error);
+    g_assert_null(foreign);
+    g_clear_error(&error);
+    g_autoptr(MdRelease) draft =
+        md_release_parse("{\"tag_name\":\"v9.0.0\",\"draft\":true,\"html_url\":\"https://"
+                         "github.com/ingferchorojas/media-downloader-gtk/releases/tag/v9.0.0\"}",
+                         MD_APP_REPOSITORY, FALSE, &error);
+    g_assert_null(draft);
+    g_clear_error(&error);
+    const gchar *engine =
+        "{\"tag_name\":\"2026.08.19\",\"html_url\":\"https://github.com/yt-dlp/yt-dlp/releases/tag/"
+        "2026.08.19\",\"assets\":[{\"name\":\"yt-dlp\",\"browser_download_url\":\"https://"
+        "github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/"
+        "yt-dlp\"},{\"name\":\"SHA2-256SUMS\",\"browser_download_url\":\"https://github.com/yt-dlp/"
+        "yt-dlp/releases/download/2026.08.19/SHA2-256SUMS\"}]}";
+    g_autoptr(MdRelease) e = md_release_parse(engine, MD_ENGINE_REPOSITORY, TRUE, &error);
+    g_assert_no_error(error);
+    g_assert_nonnull(e->download_url);
+    g_assert_nonnull(e->checksum_url);
+}
+static void checksums(void) {
+    g_autoptr(GBytes) bytes = g_bytes_new_static("abc", 3);
+    g_assert_true(md_checksum_matches(
+        bytes, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+    g_assert_false(md_checksum_matches(
+        bytes, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ae"));
+    g_assert_false(md_checksum_matches(bytes, "invalid"));
+}
+static void atomic_update(void) {
+    g_autofree gchar *path = md_engine_managed_path(), *dir = g_path_get_dirname(path);
+    g_assert_cmpint(g_mkdir_with_parents(dir, 0700), ==, 0);
+    g_assert_true(g_file_set_contents(path, "previous version", -1, NULL));
+    const gchar fixture[] = "#!/bin/sh\nprintf '2026.08.19\\n'\n";
+    g_autoptr(GBytes) bytes = g_bytes_new_static(fixture, sizeof fixture - 1);
+    g_autofree gchar *digest = g_compute_checksum_for_bytes(G_CHECKSUM_SHA256, bytes);
+    g_autoptr(GError) error = NULL;
+    g_autofree gchar *bad = md_engine_install(bytes, "bad checksum", "2026.08.19", NULL, &error);
+    g_assert_null(bad);
+    g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+    g_clear_error(&error);
+    g_autofree gchar *mismatch = md_engine_install(bytes, digest, "2026.08.20", NULL, &error);
+    g_assert_null(mismatch);
+    g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+    g_clear_error(&error);
+    g_autoptr(GCancellable) cancel = g_cancellable_new();
+    g_cancellable_cancel(cancel);
+    g_autofree gchar *cancelled = md_engine_install(bytes, digest, "2026.08.19", cancel, &error);
+    g_assert_null(cancelled);
+    g_assert_error(error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+    g_clear_error(&error);
+    g_autofree gchar *old = NULL;
+    g_assert_true(g_file_get_contents(path, &old, NULL, NULL));
+    g_assert_cmpstr(old, ==, "previous version");
+    g_autofree gchar *version = md_engine_install(bytes, digest, "2026.08.19", NULL, &error);
+    g_assert_no_error(error);
+    g_assert_cmpstr(version, ==, "2026.08.19");
+    g_autofree gchar *selected = md_engine_path();
+    g_assert_cmpstr(selected, ==, path);
+    const gchar *args[] = {"yt-dlp", "--", "https://example.com", NULL};
+    g_auto(GStrv) argv = md_engine_argv(args);
+    g_assert_cmpstr(argv[0], ==, path);
+    GDir *listing = g_dir_open(dir, 0, NULL);
+    guint count = 0;
+    while (g_dir_read_name(listing))
+        count++;
+    g_dir_close(listing);
+    g_assert_cmpuint(count, ==, 1);
+    g_unlink(path);
+    g_rmdir(dir);
+    g_autofree gchar *parent = g_path_get_dirname(dir);
+    g_rmdir(parent);
+    g_autofree gchar *data = g_path_get_dirname(parent);
+    g_rmdir(data);
 }
 static void queue(void) {
     MdManager *m = md_manager_new(NULL, NULL);
@@ -219,6 +319,8 @@ int main(int argc, char **argv) {
     }
     g_autofree gchar *config = g_dir_make_tmp("md-test-config-XXXXXX", NULL);
     g_setenv("XDG_CONFIG_HOME", config, TRUE);
+    g_autofree gchar *data_dir = g_build_filename(config, "data", NULL);
+    g_setenv("XDG_DATA_HOME", data_dir, TRUE);
     test_program = argv[0];
     g_test_init(&argc, &argv, NULL);
     g_test_add_func("/utils/url", urls);
@@ -228,6 +330,10 @@ int main(int argc, char **argv) {
     g_test_add_func("/metadata/playlist", playlist);
     g_test_add_func("/errors/messages", errors);
     g_test_add_func("/download/progress", progress);
+    g_test_add_func("/updates/version-order", versions);
+    g_test_add_func("/updates/releases", releases);
+    g_test_add_func("/updates/checksums", checksums);
+    g_test_add_func("/updates/atomic-install-rollback", atomic_update);
     g_test_add_func("/manager/queue", queue);
     g_test_add_func("/process/success", process_success);
     g_test_add_func("/process/failure", process_failure);

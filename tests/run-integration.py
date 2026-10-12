@@ -11,7 +11,7 @@ import threading
 
 with tempfile.TemporaryDirectory(prefix='md-integration-') as tmp:
     root = pathlib.Path(tmp)
-    media = root / 'own-test.mp4'
+    media = root / 'own test.mp4'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=10',
                     '-f', 'lavfi', '-i', 'sine=frequency=440', '-t', '3', '-c:v', 'libx264',
                     '-pix_fmt', 'yuv420p', '-c:a', 'aac', str(media)], check=True)
@@ -29,11 +29,11 @@ with tempfile.TemporaryDirectory(prefix='md-integration-') as tmp:
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=tmp)
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    url = f'http://127.0.0.1:{server.server_port}/own-test.mp4'
+    url = f'http://127.0.0.1:{server.server_port}/own%20test.mp4'
     (root / 'own-test.html').write_text(
         '<html><head><title>own-test</title><meta property="og:image" '
         f'content="http://127.0.0.1:{server.server_port}/cover.jpg"></head>'
-        '<body><video controls src="own-test.mp4" poster="cover.jpg"></video></body></html>')
+        '<body><video controls src="own%20test.mp4" poster="cover.jpg"></video></body></html>')
     page_url = f'http://127.0.0.1:{server.server_port}/own-test.html'
     binary = str(pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else 'build/test-integration').resolve())
     try:
@@ -47,6 +47,7 @@ with tempfile.TemporaryDirectory(prefix='md-integration-') as tmp:
             subprocess.run([binary, url, str(dest), ext], check=True, timeout=50)
             outputs = list(dest.glob(f'*.{ext}'))
             assert outputs, f'Missing {ext} output'
+            assert 'own test' in outputs[0].name, outputs[0].name
             subprocess.run(['ffprobe', '-v', 'error', str(outputs[0])], check=True)
         for ext, manifest in ([] if os.environ.get('MD_ONLY_UI') else [('mp4', 'dash'), ('mkv', 'dash'), ('webm', 'webm-dash')]):
             dest = root / f'merged-{ext}'

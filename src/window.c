@@ -2,6 +2,8 @@
 #include "download-manager.h"
 #include "preferences.h"
 #include "utils.h"
+#include "updates.h"
+#include "config.h"
 #include <glib/gstdio.h>
 typedef struct {
     GtkWidget *box, *title, *state, *detail, *progress, *cancel, *retry, *remove;
@@ -11,18 +13,25 @@ typedef struct {
 typedef struct {
     GtkApplication *app;
     GtkWidget *window, *url, *analyze, *spinner, *message, *title, *meta, *picture, *placeholder,
-        *format, *quality, *hint, *destination, *download, *playlist, *list, *counter;
+        *format, *quality, *hint, *destination, *download, *playlist, *list, *counter,
+        *engine_update_label, *app_update_label, *engine_update_button, *app_update_button,
+        *check_updates_button;
     MdPreferences *prefs;
     MdManager *manager;
     MdVideo *video;
-    GCancellable *analysis_cancel, *thumbnail_cancel;
+    GCancellable *analysis_cancel, *thumbnail_cancel, *updates_cancel;
+    MdUpdates *updates;
     GArray *heights;
     GPtrArray *checks;
     GtkNativeDialog *chooser;
     guint pending;
-    gboolean dependencies, closing;
+    gboolean dependencies, closing, checking_updates, updating;
     gchar *analyzed_url;
 } Window;
+static void refresh_update_controls(Window *w);
+static void check_updates(Window *w);
+static void clear_video(Window *w);
+static void dependencies_done(GObject *source, GAsyncResult *result, gpointer data);
 static const gchar *containers[] = {"mp4",  "webm", "mkv", "mp3", "m4a",
                                     "opus", "flac", "wav", NULL};
 static const gchar *container_labels[] = {"Video · MP4",  "Video · WebM", "Video · MKV",
@@ -68,7 +77,7 @@ static const gchar *selected_container(Window *w) {
     return n < 8 ? containers[n] : "mp4";
 }
 static void update_selection(Window *w) {
-    gboolean ready = w->video && w->dependencies && !w->closing;
+    gboolean ready = w->video && w->dependencies && !w->closing && !w->updating;
     gtk_widget_set_sensitive(w->format, ready);
     gtk_widget_set_sensitive(w->quality,
                              ready && gtk_drop_down_get_selected(GTK_DROP_DOWN(w->format)) < 3);
@@ -132,6 +141,7 @@ static void row_remove(GtkButton *b, gpointer data) {
 }
 static void job_changed(MdJob *j, gpointer data) {
     Window *w = data;
+    refresh_update_controls(w);
     Row *r = j->ui;
     if (!r)
         return;
@@ -228,7 +238,7 @@ static void confirm_playlist(GtkDialog *dialog, gint response, gpointer data) {
 static void download_clicked(GtkButton *b, gpointer data) {
     (void)b;
     Window *w = data;
-    if (!w->video || !w->dependencies)
+    if (!w->video || !w->dependencies || w->updating)
         return;
     if (!w->video->entries->len) {
         enqueue_selected(w);
@@ -295,6 +305,7 @@ static void thumbnail_done(gboolean ok, const gchar *error, gpointer data) {
     }
     g_rmdir(t->dir);
     t->w->pending--;
+    refresh_update_controls(t->w);
     g_object_unref(t->cancel);
     g_free(t->dir);
     g_free(t);
@@ -340,6 +351,7 @@ static void load_thumbnail(Window *w) {
 static void analysis_done(MdVideo *video, const gchar *error, gpointer data) {
     Window *w = data;
     w->pending--;
+    refresh_update_controls(w);
     gtk_spinner_stop(GTK_SPINNER(w->spinner));
     gtk_widget_set_sensitive(w->analyze, w->dependencies && !w->closing);
     if (w->closing) {
@@ -455,6 +467,7 @@ static void pasted(GObject *source, GAsyncResult *result, gpointer data) {
     Window *w = data;
     g_autofree gchar *text = gdk_clipboard_read_text_finish(GDK_CLIPBOARD(source), result, NULL);
     w->pending--;
+    refresh_update_controls(w);
     if (text && !w->closing)
         gtk_editable_set_text(GTK_EDITABLE(w->url), g_strstrip(text));
 }
@@ -469,6 +482,7 @@ static void folder_response(GtkNativeDialog *dialog, gint response, gpointer dat
     Window *w = data;
     w->chooser = NULL;
     w->pending--;
+    refresh_update_controls(w);
     if (response == GTK_RESPONSE_ACCEPT && !w->closing) {
         g_autoptr(GFile) file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
         gchar *path = g_file_get_path(file);
@@ -630,8 +644,8 @@ static void about_clicked(GtkButton *b, gpointer data) {
     (void)b;
     Window *w = data;
     gtk_show_about_dialog(
-        GTK_WINDOW(w->window), "program-name", "Media Downloader", "version", "1.0.0", "copyright",
-        "© 2026 Fernando Rojas", "license-type", GTK_LICENSE_MIT_X11, "logo-icon-name",
+        GTK_WINDOW(w->window), "program-name", "Media Downloader", "version", MD_APP_VERSION,
+        "copyright", "© 2026 Fernando Rojas", "license-type", GTK_LICENSE_MIT_X11, "logo-icon-name",
         "media-downloader-gtk", "comments",
         "Interfaz nativa para yt-dlp y FFmpeg. Descarga únicamente contenido autorizado.", NULL);
 }
@@ -648,6 +662,8 @@ static gboolean await_close(gpointer data) {
     md_video_free(w->video);
     g_object_unref(w->analysis_cancel);
     g_object_unref(w->thumbnail_cancel);
+    g_object_unref(w->updates_cancel);
+    md_updates_free(w->updates);
     g_array_unref(w->heights);
     g_ptr_array_unref(w->checks);
     g_free(w->analyzed_url);
@@ -664,6 +680,7 @@ static gboolean close_requested(GtkWindow *window, gpointer data) {
         gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
         g_cancellable_cancel(w->analysis_cancel);
         g_cancellable_cancel(w->thumbnail_cancel);
+        g_cancellable_cancel(w->updates_cancel);
         md_manager_stop(w->manager);
         g_timeout_add(50, await_close, w);
     }
@@ -673,6 +690,7 @@ static void dependencies_done(GObject *source, GAsyncResult *result, gpointer da
     (void)source;
     Window *w = data;
     w->pending--;
+    refresh_update_controls(w);
     g_autoptr(GError) error = NULL;
     w->dependencies = md_dependencies_finish(result, &error);
     if (!w->closing) {
@@ -681,6 +699,146 @@ static void dependencies_done(GObject *source, GAsyncResult *result, gpointer da
                          : "yt-dlp y FFmpeg disponibles. Introduce una URL para comenzar.");
     }
 }
+static void refresh_update_controls(Window *w) {
+    if (!w->engine_update_button)
+        return;
+    gtk_widget_set_sensitive(w->engine_update_button, !w->closing && !w->updating &&
+                                                          !w->checking_updates && w->pending == 0 &&
+                                                          w->manager->active == 0);
+    gtk_widget_set_sensitive(w->check_updates_button,
+                             !w->closing && !w->updating && !w->checking_updates);
+}
+static void updates_checked(GObject *source, GAsyncResult *result, gpointer data) {
+    (void)source;
+    Window *w = data;
+    w->pending--;
+    w->checking_updates = FALSE;
+    g_autoptr(GError) error = NULL;
+    MdUpdates *updates = md_updates_check_finish(result, &error);
+    if (w->closing) {
+        md_updates_free(updates);
+        return;
+    }
+    md_updates_free(w->updates);
+    w->updates = updates;
+    gtk_widget_set_visible(w->engine_update_button, FALSE);
+    gtk_widget_set_visible(w->app_update_button, FALSE);
+    if (!updates) {
+        gtk_label_set_text(GTK_LABEL(w->engine_update_label),
+                           error ? error->message
+                                 : "No se pudieron comprobar las actualizaciones.");
+        gtk_label_set_text(GTK_LABEL(w->app_update_label),
+                           "Puedes volver a comprobar desde la barra superior.");
+        refresh_update_controls(w);
+        return;
+    }
+    if (updates->engine_error)
+        gtk_label_set_text(GTK_LABEL(w->engine_update_label),
+                           "No se pudo consultar la última versión de yt-dlp. Comprueba la "
+                           "conexión o inténtalo más tarde.");
+    else if (updates->engine) {
+        gboolean newer = md_version_newer(updates->installed_engine, updates->engine->version);
+        g_autofree gchar *text =
+            newer ? g_strdup_printf("yt-dlp %s · Disponible: %s",
+                                    updates->installed_engine ? updates->installed_engine
+                                                              : "no instalado",
+                                    updates->engine->version)
+                  : g_strdup_printf("yt-dlp %s · Última versión estable: %s",
+                                    updates->installed_engine ? updates->installed_engine
+                                                              : "no disponible",
+                                    updates->engine->version);
+        gtk_label_set_text(GTK_LABEL(w->engine_update_label), text);
+        gtk_widget_set_visible(w->engine_update_button, newer);
+        gtk_button_set_label(GTK_BUTTON(w->engine_update_button),
+                             updates->installed_engine ? "Actualizar yt-dlp" : "Instalar yt-dlp");
+    }
+    if (updates->app_error)
+        gtk_label_set_text(GTK_LABEL(w->app_update_label),
+                           "No se pudieron consultar las versiones de la aplicación. Puedes volver "
+                           "a comprobar más tarde.");
+    else if (updates->app_unpublished)
+        gtk_label_set_text(GTK_LABEL(w->app_update_label),
+                           "Aplicación " MD_APP_VERSION
+                           " · Aún no hay versiones publicadas en GitHub.");
+    else if (updates->app) {
+        gboolean newer = md_version_newer(MD_APP_VERSION, updates->app->version);
+        g_autofree gchar *text =
+            newer
+                ? g_strdup_printf("Aplicación " MD_APP_VERSION " · Nueva versión: %s",
+                                  updates->app->version)
+                : g_strdup("Aplicación " MD_APP_VERSION " · Estás usando la versión más reciente.");
+        gtk_label_set_text(GTK_LABEL(w->app_update_label), text);
+        gtk_widget_set_visible(w->app_update_button, newer);
+    }
+    refresh_update_controls(w);
+}
+static void check_updates(Window *w) {
+    if (w->closing || w->checking_updates || w->updating)
+        return;
+    w->checking_updates = TRUE;
+    w->pending++;
+    g_cancellable_reset(w->updates_cancel);
+    gtk_label_set_text(GTK_LABEL(w->engine_update_label), "Comprobando actualizaciones de yt-dlp…");
+    gtk_label_set_text(GTK_LABEL(w->app_update_label), "Comprobando versiones de la aplicación…");
+    gtk_widget_set_visible(w->engine_update_button, FALSE);
+    gtk_widget_set_visible(w->app_update_button, FALSE);
+    refresh_update_controls(w);
+    md_updates_check_async(w->updates_cancel, updates_checked, w);
+}
+static void check_updates_clicked(GtkButton *button, gpointer data) {
+    (void)button;
+    check_updates(data);
+}
+static void engine_updated(GObject *source, GAsyncResult *result, gpointer data) {
+    (void)source;
+    Window *w = data;
+    w->pending--;
+    w->updating = FALSE;
+    g_autoptr(GError) error = NULL;
+    g_autofree gchar *version = md_engine_update_finish(result, &error);
+    if (w->closing)
+        return;
+    if (!version) {
+        gtk_widget_set_sensitive(w->analyze, w->dependencies);
+        update_selection(w);
+        message(w, error ? error->message : "No se pudo actualizar yt-dlp.");
+        refresh_update_controls(w);
+        gtk_button_set_label(GTK_BUTTON(w->engine_update_button), "Reintentar actualización");
+        return;
+    }
+    g_autofree gchar *text = g_strdup_printf("yt-dlp %s actualizado correctamente.", version);
+    message(w, text);
+    clear_video(w);
+    update_selection(w);
+    w->pending++;
+    md_dependencies_async(dependencies_done, w);
+    check_updates(w);
+}
+static void engine_update_clicked(GtkButton *button, gpointer data) {
+    (void)button;
+    Window *w = data;
+    if (!w->updates || !w->updates->engine || w->updating || w->checking_updates || w->closing)
+        return;
+    if (w->pending || w->manager->active) {
+        message(w, "Espera a que finalicen los análisis y las descargas para actualizar yt-dlp.");
+        return;
+    }
+    w->updating = TRUE;
+    w->pending++;
+    gtk_widget_set_sensitive(w->analyze, FALSE);
+    update_selection(w);
+    refresh_update_controls(w);
+    gtk_button_set_label(GTK_BUTTON(w->engine_update_button), "Actualizando…");
+    message(w, "Descargando y verificando la nueva versión de yt-dlp…");
+    md_engine_update_async(w->updates->engine, w->updates_cancel, engine_updated, w);
+}
+static void app_update_clicked(GtkButton *button, gpointer data) {
+    (void)button;
+    Window *w = data;
+    if (w->updates && w->updates->app)
+        gtk_show_uri(GTK_WINDOW(w->window), w->updates->app->page_url, GDK_CURRENT_TIME);
+}
+
 void md_window_present(GtkApplication *application) {
     GtkWindow *existing = gtk_application_get_active_window(application);
     if (existing) {
@@ -694,11 +852,12 @@ void md_window_present(GtkApplication *application) {
     w->manager->limit = w->prefs->concurrency;
     w->analysis_cancel = g_cancellable_new();
     w->thumbnail_cancel = g_cancellable_new();
+    w->updates_cancel = g_cancellable_new();
     w->heights = g_array_new(FALSE, FALSE, sizeof(gint));
     w->checks = g_ptr_array_new();
     w->window = gtk_application_window_new(application);
     gtk_window_set_title(GTK_WINDOW(w->window), "Media Downloader");
-    gtk_window_set_default_size(GTK_WINDOW(w->window), 920, 820);
+    gtk_window_set_default_size(GTK_WINDOW(w->window), 920, 940);
     gtk_widget_set_size_request(w->window, 620, 540);
     apply_theme(w);
     GtkCssProvider *css = gtk_css_provider_new();
@@ -717,6 +876,8 @@ void md_window_present(GtkApplication *application) {
     GtkWidget *prefs = icon_button("emblem-system-symbolic", "Preferencias"),
               *theme = icon_button("weather-clear-night-symbolic", "Alternar tema claro y oscuro"),
               *about = icon_button("help-about-symbolic", "Acerca de");
+    w->check_updates_button = icon_button("view-refresh-symbolic", "Buscar actualizaciones");
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), w->check_updates_button);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), about);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), prefs);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), theme);
@@ -727,9 +888,30 @@ void md_window_present(GtkApplication *application) {
     margins(content, 28);
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), content);
     gtk_window_set_child(GTK_WINDOW(w->window), scroll);
-    gtk_box_append(GTK_BOX(content), label("Guarda lo que te inspira", "title"));
+    gtk_box_append(GTK_BOX(content), label("Interfaz gráfica para yt-dlp", "title"));
     gtk_box_append(GTK_BOX(content),
                    label("Video y audio, directamente en tu equipo.", "dim-label"));
+    GtkWidget *updates_box = box(GTK_ORIENTATION_VERTICAL, 8);
+    GtkWidget *engine_line = box(GTK_ORIENTATION_HORIZONTAL, 12),
+              *app_line = box(GTK_ORIENTATION_HORIZONTAL, 12);
+    w->engine_update_label = label("Comprobando actualizaciones de yt-dlp…", "dim-label");
+    w->app_update_label = label("Comprobando versiones de la aplicación…", "dim-label");
+    gtk_widget_set_hexpand(w->engine_update_label, TRUE);
+    gtk_widget_set_hexpand(w->app_update_label, TRUE);
+    w->engine_update_button = gtk_button_new_with_label("Actualizar yt-dlp");
+    gtk_widget_set_tooltip_text(
+        w->engine_update_button,
+        "Instalar una copia actualizada para este usuario, sin permisos de administrador");
+    w->app_update_button = gtk_button_new_with_label("Descargar nueva versión");
+    gtk_widget_set_visible(w->engine_update_button, FALSE);
+    gtk_widget_set_visible(w->app_update_button, FALSE);
+    gtk_box_append(GTK_BOX(engine_line), w->engine_update_label);
+    gtk_box_append(GTK_BOX(engine_line), w->engine_update_button);
+    gtk_box_append(GTK_BOX(app_line), w->app_update_label);
+    gtk_box_append(GTK_BOX(app_line), w->app_update_button);
+    gtk_box_append(GTK_BOX(updates_box), engine_line);
+    gtk_box_append(GTK_BOX(updates_box), app_line);
+    gtk_box_append(GTK_BOX(content), updates_box);
     GtkWidget *analysis = box(GTK_ORIENTATION_HORIZONTAL, 10);
     w->url = gtk_entry_new();
     gtk_entry_set_placeholder_text(GTK_ENTRY(w->url),
@@ -813,6 +995,9 @@ void md_window_present(GtkApplication *application) {
         label("Descarga solo contenido propio, de dominio público o autorizado. Respeta los "
               "derechos de autor, los términos del sitio y la legislación aplicable.",
               "dim-label"));
+    g_signal_connect(w->engine_update_button, "clicked", G_CALLBACK(engine_update_clicked), w);
+    g_signal_connect(w->app_update_button, "clicked", G_CALLBACK(app_update_clicked), w);
+    g_signal_connect(w->check_updates_button, "clicked", G_CALLBACK(check_updates_clicked), w);
     g_signal_connect(prefs, "clicked", G_CALLBACK(preferences_clicked), w);
     g_signal_connect(theme, "clicked", G_CALLBACK(theme_clicked), w);
     g_signal_connect(about, "clicked", G_CALLBACK(about_clicked), w);
@@ -828,4 +1013,5 @@ void md_window_present(GtkApplication *application) {
     gtk_window_present(GTK_WINDOW(w->window));
     w->pending++;
     md_dependencies_async(dependencies_done, w);
+    check_updates(w);
 }

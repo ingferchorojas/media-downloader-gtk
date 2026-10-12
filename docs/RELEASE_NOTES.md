@@ -4,6 +4,8 @@ Native C11 / GTK4 media downloader with a Spanish interface, powered by external
 yt-dlp and FFmpeg installations. Includes JSON metadata analysis, compatible
 video format selection, audio conversion, structured live progress, a concurrent
 queue, cancellation, retries, playlist selection and local preferences.
+Checks GitHub for newer engine/application releases at startup, offers a verified
+per-user engine update, and preserves spaces in downloaded filenames.
 
 Release artifacts: architecture-specific Debian package and source code.
 

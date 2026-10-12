@@ -26,7 +26,7 @@ Priority: optional
 Architecture: $arch
 Installed-Size: $(du -sk "$stage/usr" | cut -f1)
 Maintainer: Fernando Rojas <ingferchorojas@users.noreply.github.com>
-Depends: $deps, yt-dlp (>= 2023.03.04), ffmpeg
+Depends: $deps, yt-dlp (>= 2023.03.04), ffmpeg, python3, ca-certificates
 Description: Native GTK4 media downloader powered by yt-dlp
  Spanish desktop interface with asynchronous downloads, a concurrent queue,
  format selection, FFmpeg audio conversion and persistent local preferences.

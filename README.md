@@ -21,6 +21,9 @@ interface is in Spanish; contributor documentation is in English.
   explicit confirmation before enqueueing playlist content.
 - Persistent preferences in a private GLib key file; system, light and dark theme
   settings; completion notifications and optional folder opening.
+- Startup checks for stable yt-dlp and application releases on GitHub, with an
+  explicit engine-update button and a link to newer application releases.
+- Natural filenames preserving spaces and Unicode characters.
 - MIT-licensed original code and icon. yt-dlp and FFmpeg remain external dependencies.
 
 ![Completed MP3 download from the owner-provided YouTube URL](docs/images/main-window.png)
@@ -28,7 +31,7 @@ interface is in Spanish; contributor documentation is in English.
 ## Requirements
 
 Ubuntu 24.04 or a compatible Debian-based distribution, GTK >= 4.6,
-GLib / GIO >= 2.70, JSON-GLib >= 1.6, yt-dlp >= 2023.03.04 and FFmpeg.
+GLib / GIO >= 2.70, JSON-GLib >= 1.6, libsoup >= 3.0, yt-dlp >= 2023.03.04 and FFmpeg.
 Source sites evolve: use an appropriately maintained yt-dlp installation.
 For current YouTube extraction, yt-dlp also needs its EJS components and a
 supported JavaScript runtime; see the [upstream EJS setup guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
@@ -37,8 +40,9 @@ The Ubuntu-built `.deb` uses Ubuntu ABI package names; build a package on Debian
 for Debian rather than assuming Ubuntu binaries are interchangeable.
 
 JSON-GLib is used for typed metadata and progress parsing instead of adding a
-custom JSON parser. Thumbnails are retrieved by a separate cancellable yt-dlp
-process and converted to PNG by FFmpeg; this avoids a second HTTP stack.
+custom JSON parser. libsoup provides native HTTPS for update checks and downloads,
+with cancellable worker operations, timeouts and bounded response sizes. Thumbnails are retrieved by a separate cancellable yt-dlp
+process and converted to PNG by FFmpeg; this keeps media extraction under the same engine.
 
 ## Install a Debian package
 
@@ -58,7 +62,7 @@ as declared dependencies; the application does not install dependencies.
 ```sh
 sudo apt update
 sudo apt install build-essential pkg-config meson ninja-build libgtk-4-dev \
-  libglib2.0-dev libjson-glib-dev yt-dlp ffmpeg dpkg-dev
+  libglib2.0-dev libjson-glib-dev libsoup-3.0-dev yt-dlp ffmpeg dpkg-dev
 meson setup build --prefix=/usr/local
 meson compile -C build
 meson test -C build --print-errorlogs
@@ -95,7 +99,8 @@ uses those local tools. They are not bundled or required by a normal build.
 100% is reserved for completed jobs. Track downloads may restart their percentage
 when a new track begins; the display identifies values as the current track.
 Unknown values are shown as `—`. Cancellation preserves partial files for retries.
-Existing output files are not overwritten. Removing a row never deletes files.
+Filenames retain spaces and Unicode; yt-dlp still sanitizes characters that cannot
+be used in file paths. Existing output files are not overwritten. Removing a row never deletes files.
 Closing the main window cancels running jobs and waits for process cleanup.
 
 Preferences live at `$XDG_CONFIG_HOME/media-downloader-gtk/preferences.ini`
@@ -103,20 +108,54 @@ Preferences live at `$XDG_CONFIG_HOME/media-downloader-gtk/preferences.ini`
 kept only during the session; preferences contain no credentials. User preferences
 remain after package removal, as is normal for desktop applications.
 
+## Updates
+
+Opening the main window checks the latest published stable GitHub Release of
+both yt-dlp and this application. The checks run in the background; failures,
+rate limits or no published application release do not prevent local downloads.
+Use the refresh icon in the header to check again.
+
+When a newer engine is available, **Actualizar yt-dlp** downloads the official
+Unix executable only after a click. The download is checked against SHA-256
+from GitHub's release digest or its official checksum list, and its `--version`
+is checked before atomic replacement. Failed or cancelled updates preserve the
+existing executable. No administrator access or system package replacement is
+needed. Updates are disabled while analysis or download processes are active.
+
+The managed executable lives in
+`$XDG_DATA_HOME/media-downloader-gtk/bin/yt-dlp`
+(default `~/.local/share/media-downloader-gtk/bin/yt-dlp`). This copy takes
+precedence over the system executable. Python >= 3.10 is needed by the official
+Unix engine; current YouTube support also needs its bundled EJS scripts and a
+supported runtime. The app enables compatible Deno >= 2.3 or Node >= 22 found
+in `PATH` when the selected yt-dlp supports `--js-runtimes`. It does not install
+JavaScript runtimes. The application and interface remain C11.
+
+**Descargar nueva versión** opens the newer application Release page so the
+user can download the appropriate package. Application updates are not silently
+installed. GitHub Releases, rather than individual commits, define available
+application versions; no stable Release has been published yet.
+
+Update requests contact GitHub anonymously over HTTPS and send no URLs,
+download history, preferences or credentials. There is no application telemetry.
+
 ## Tests
 
 ```sh
 meson test -C build --print-errorlogs
 python3 tests/run-integration.py
 # Optional full GTK integration, on an isolated virtual display:
-sudo apt install xvfb dbus-x11
+sudo apt install xvfb dbus-x11 at-spi2-core
 MD_TEST_UI=1 G_DEBUG=fatal-warnings GDK_BACKEND=x11 GSK_RENDERER=cairo \
   dbus-run-session -- xvfb-run -a python3 tests/run-integration.py
 ```
 
 Unit tests cover URL validation, units, malformed and valid JSON, codec/container
 selection, missing resolutions, unknown progress fields, queue cancellation and
-retry, real subprocess success/failure/cancellation (including descendants after parent exit), and preference persistence.
+retry, real subprocess success/failure/cancellation (including descendants after
+parent exit), and preference persistence. Update tests cover numeric version ordering,
+release URL validation, rejected drafts, digest verification, failed/cancelled
+installation preserving the existing executable, and atomic replacement.
 Integration tests generate original synthetic media with FFmpeg, serve it on
 loopback, and run the actual application engine using yt-dlp and FFmpeg. Separate DASH video/audio tracks are combined into MP4 and MKV, and VP9/Opus
 tracks into WebM. Queue concurrency, active cancellation and HTTP errors are
@@ -157,6 +196,8 @@ non-root graphical startup in Xvfb and APT removal. Docker access is required.
 - `downloader.c`: asynchronous subprocess streams, JSON progress, dependency checks.
 - `download-manager.c`: independent jobs, bounded queue and state transitions.
 - `preferences.c`: atomic local GLib key-file persistence.
+- `updates.c`: bounded GitHub HTTP checks and verified atomic engine updates.
+- `engine.c`: managed/system engine resolution and compatible runtime selection.
 - `utils.c`: URL, duration, byte and destination validation.
 
 Pass process arguments as individual argv entries and terminate the option list

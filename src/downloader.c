@@ -1,5 +1,6 @@
 #include "downloader.h"
 #include "utils.h"
+#include "engine.h"
 #include <signal.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -70,7 +71,9 @@ MdProcess *md_process_start(const gchar *const *argv, MdLineFunc line, MdDoneFun
                             gpointer data, GError **error) {
     g_autoptr(GSubprocessLauncher) l =
         launcher(G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
-    GSubprocess *child = g_subprocess_launcher_spawnv(l, argv, error);
+    g_auto(GStrv) engine_args = g_strcmp0(argv[0], "yt-dlp") == 0 ? md_engine_argv(argv) : NULL;
+    GSubprocess *child = g_subprocess_launcher_spawnv(
+        l, engine_args ? (const gchar *const *)engine_args : argv, error);
     if (!child)
         return NULL;
     MdProcess *p = g_new0(MdProcess, 1);
@@ -157,7 +160,8 @@ void md_analyze_async(const gchar *url, GCancellable *cancel, MdAnalysisFunc cal
                            NULL};
     g_autoptr(GSubprocessLauncher) l =
         launcher(G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
-    GSubprocess *child = g_subprocess_launcher_spawnv(l, argv, &error);
+    g_auto(GStrv) engine_args = md_engine_argv(argv);
+    GSubprocess *child = g_subprocess_launcher_spawnv(l, (const gchar *const *)engine_args, &error);
     if (!child) {
         callback(NULL, error->message, data);
         return;
@@ -186,7 +190,8 @@ static void dependency_worker(GTask *task, gpointer source, gpointer task_data,
     (void)source;
     (void)task_data;
     (void)cancel;
-    const gchar *programs[] = {"yt-dlp", "ffmpeg"};
+    g_autofree gchar *engine = md_engine_path();
+    const gchar *programs[] = {engine, "ffmpeg"};
     for (guint i = 0; i < 2; i++) {
         g_autoptr(GError) error = NULL;
         g_autoptr(GSubprocess) p =
@@ -200,6 +205,7 @@ static void dependency_worker(GTask *task, gpointer source, gpointer task_data,
             return;
         }
     }
+    md_engine_probe_runtime(engine);
     g_autoptr(GError) error = NULL;
     g_autoptr(GSubprocess) encoders =
         g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE, &error,

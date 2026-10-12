@@ -10,9 +10,10 @@ Dependencies retain their own licenses and are not bundled in the Debian package
   Ubuntu's build may be GPL. Consult the installed package's copyright file.
 - [GTK4](https://docs.gtk.org/gtk4/): LGPL-2.1-or-later.
 - [GLib / GIO](https://gitlab.gnome.org/GNOME/glib/-/blob/main/COPYING): LGPL-2.1-or-later.
+- [libsoup](https://libsoup.gnome.org/libsoup-3.0/): LGPL-2.1-or-later.
 - [JSON-GLib](https://gitlab.gnome.org/GNOME/json-glib/-/blob/main/COPYING): LGPL-2.1-or-later.
 
-GTK, GLib and JSON-GLib are dynamically linked and remain replaceable system
+GTK, GLib, JSON-GLib and libsoup are dynamically linked and remain replaceable system
 libraries. yt-dlp and FFmpeg run as external system programs. Redistributors
 must respect the license and source availability requirements of any dependency
 binaries they separately distribute. Debian copyright information is normally

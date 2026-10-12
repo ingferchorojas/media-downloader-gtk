@@ -3,13 +3,15 @@
 #include <string.h>
 static GtkApplication *app;
 static guint step, ticks;
+static gboolean update_started, update_finished;
 static const gchar *url, *screenshot;
 static GtkWidget *find_widget(GtkWidget *root, GType type, const gchar *text) {
     if (g_type_is_a(G_OBJECT_TYPE(root), type)) {
         const gchar *value = GTK_IS_LABEL(root)    ? gtk_label_get_text(GTK_LABEL(root))
                              : GTK_IS_BUTTON(root) ? gtk_button_get_label(GTK_BUTTON(root))
                                                    : NULL;
-        if (!text || (value && strstr(value, text)))
+        if (!text || (value && (GTK_IS_BUTTON(root) ? g_strcmp0(value, text) == 0
+                                                    : strstr(value, text) != NULL)))
             return root;
     }
     for (GtkWidget *child = gtk_widget_get_first_child(root); child;
@@ -52,6 +54,17 @@ static gboolean drive(gpointer data) {
     g_assert_nonnull(window);
     GtkWidget *root = GTK_WIDGET(window);
     if (step == 0) {
+        if (g_getenv("MD_UI_UPDATE_ENGINE") && !update_finished) {
+            GtkWidget *update = find_widget(root, GTK_TYPE_BUTTON, "Actualizar yt-dlp");
+            if (!update_started) {
+                if (!update || !gtk_widget_get_visible(update) || !gtk_widget_get_sensitive(update))
+                    return G_SOURCE_CONTINUE;
+                g_signal_emit_by_name(update, "clicked");
+                update_started = TRUE;
+            } else if (find_widget(root, GTK_TYPE_LABEL, "Última versión estable"))
+                update_finished = TRUE;
+            return G_SOURCE_CONTINUE;
+        }
         GtkWidget *analyze = find_widget(root, GTK_TYPE_BUTTON, "Analizar");
         if (!gtk_widget_get_sensitive(analyze))
             return G_SOURCE_CONTINUE;

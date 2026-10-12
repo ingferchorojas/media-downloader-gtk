@@ -9,7 +9,7 @@ no host packages or global system settings were changed.
 
 - C11 compilation in debug, optimized release and ASan/UBSan configurations,
   with project warnings treated as errors.
-- 13 GLib unit tests, including metadata, playlists, container compatibility,
+- 17 GLib unit tests, including metadata, playlists, container compatibility,
   fallback/silent formats, speed units, progress, queue states, retries,
   subprocess success/failure/cancellation, descendant cleanup after parent exit,
   readable errors and preference persistence.
@@ -47,6 +47,30 @@ Node 22.23.3. Node was explicitly enabled for the test through a local launcher.
 No system installation was modified, and no cookies or authentication bypasses
 were used. Consult the upstream EJS guide for current engine setup requirements.
 This verifies the supplied video, not every YouTube video or source website.
+
+## Startup updates and filename refinements
+
+- Added libsoup 3.4.4 for bounded HTTPS requests in cancellable worker tasks.
+- Live GTK button test detected the older system engine, downloaded the official
+  yt-dlp 2026.08.19 release, verified its digest and executable version, installed
+  it inside an isolated XDG data directory, and used it for subsequent analysis
+  and completion of the owner-provided video job. The existing MP3 was preserved.
+  Compatible Node 22.23.3 was selected by the actual C engine integration from PATH.
+- GitHub's actual application endpoint returned no published Releases; the UI
+  displayed the corresponding status. Newer application version comparison and
+  Release-page validation are covered with deterministic JSON fixtures.
+- Tests reject corrupt SHA-256, mismatched executable versions and cancellation,
+  preserving the prior executable byte-for-byte; successful atomic installation
+  selects the managed executable and leaves no staging files.
+- Real generated-media integration with the updated engine verified MP4 and all
+  audio outputs retain spaces in filenames, alongside the existing merge, queue,
+  cancellation, error and no-overwrite checks.
+- The owner-requested MP3 in Downloads was renamed with spaces using the engine's
+  normal filename sanitization. A slash in the title becomes a safe Unicode slash.
+  Updated README screenshot shows the new title and actual update statuses.
+- Rebuilt the Debian artifact with libsoup, Python and TLS certificate dependencies;
+  the updated package passed APT installation, non-root GUI startup and purge
+  inside disposable Ubuntu 24.04.
 
 ## Practical limits / not verified
 

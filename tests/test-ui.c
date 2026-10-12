@@ -22,6 +22,26 @@ static GtkWidget *find_widget(GtkWidget *root, GType type, const gchar *text) {
     }
     return NULL;
 }
+static GtkWidget *theme_button(GtkWidget *root) {
+    if (GTK_IS_BUTTON(root) &&
+        g_strcmp0(gtk_widget_get_tooltip_text(root), "Alternar tema claro y oscuro") == 0)
+        return root;
+    for (GtkWidget *child = gtk_widget_get_first_child(root); child;
+         child = gtk_widget_get_next_sibling(child)) {
+        GtkWidget *found = theme_button(child);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+static gboolean dark_appearance(GtkWindow *window) {
+    GdkRGBA background;
+    g_assert_true(gtk_style_context_lookup_color(gtk_widget_get_style_context(GTK_WIDGET(window)),
+                                                 "theme_bg_color", &background));
+    return 0.2126 * background.red + 0.7152 * background.green + 0.0722 * background.blue < 0.5;
+}
+static guint theme_checks;
+static gboolean initial_dark;
 static void capture(GtkWindow *window) {
     if (!screenshot)
         return;
@@ -58,6 +78,33 @@ static gboolean drive(gpointer data) {
         gtk_icon_theme_get_for_display(gtk_widget_get_display(GTK_WIDGET(window))),
         "io.github.fernandorojas.MediaDownloader"));
     GtkWidget *root = GTK_WIDGET(window);
+    if (theme_checks < 3) {
+        GtkWidget *toggle = theme_button(root);
+        g_assert_nonnull(toggle);
+        if (theme_checks == 0) {
+            initial_dark = dark_appearance(window);
+            MdPreferences *saved = md_preferences_load();
+            if (g_strcmp0(saved->theme, "system") != 0)
+                g_assert_cmpint(initial_dark, ==, g_str_equal(saved->theme, "dark"));
+            md_preferences_free(saved);
+        } else {
+            gboolean expected = theme_checks == 1 ? !initial_dark : initial_dark;
+            g_assert_cmpint(dark_appearance(window), ==, expected);
+            MdPreferences *saved = md_preferences_load();
+            g_assert_cmpstr(saved->theme, ==, expected ? "dark" : "light");
+            md_preferences_free(saved);
+        }
+        if (theme_checks < 2)
+            g_signal_emit_by_name(toggle, "clicked");
+        theme_checks++;
+        return G_SOURCE_CONTINUE;
+    }
+    if (g_getenv("MD_THEME_ONLY")) {
+        capture(window);
+        step = 3;
+        gtk_window_close(window);
+        return G_SOURCE_REMOVE;
+    }
     if (step == 0) {
         if (g_getenv("MD_UI_UPDATE_ENGINE") && !update_finished) {
             GtkWidget *update = find_widget(root, GTK_TYPE_BUTTON, "Actualizar yt-dlp");

@@ -17,6 +17,7 @@ typedef struct {
         *engine_update_label, *app_update_label, *engine_update_button, *app_update_button,
         *check_updates_button;
     MdPreferences *prefs;
+    GtkCssProvider *theme_provider;
     MdManager *manager;
     MdVideo *video;
     GCancellable *analysis_cancel, *thumbnail_cancel, *updates_cancel;
@@ -525,15 +526,27 @@ static void choose_folder(GtkButton *b, gpointer data) {
     gtk_native_dialog_show(GTK_NATIVE_DIALOG(dialog));
 }
 static void apply_theme(Window *w) {
-    GtkSettings *settings = gtk_settings_get_default();
-    if (!settings)
-        return;
-    if (g_str_equal(w->prefs->theme, "system"))
+    GdkDisplay *display = gtk_widget_get_display(w->window);
+    GtkSettings *settings = gtk_settings_get_for_display(display);
+    if (w->theme_provider) {
+        gtk_style_context_remove_provider_for_display(display,
+                                                      GTK_STYLE_PROVIDER(w->theme_provider));
+        g_clear_object(&w->theme_provider);
+    }
+    if (g_str_equal(w->prefs->theme, "system")) {
         gtk_settings_reset_property(settings, "gtk-application-prefer-dark-theme");
-    else
-        g_object_set(settings, "gtk-application-prefer-dark-theme",
-                     g_str_equal(w->prefs->theme, "dark"), NULL);
+        return;
+    }
+    gboolean dark = g_str_equal(w->prefs->theme, "dark");
+    g_object_set(settings, "gtk-application-prefer-dark-theme", dark, NULL);
+    /* A dark-only desktop theme or GTK_THEME can ignore the preference. Load
+     * GTK's built-in variant above the desktop theme, below application CSS. */
+    w->theme_provider = gtk_css_provider_new();
+    gtk_css_provider_load_named(w->theme_provider, "Adwaita", dark ? "dark" : NULL);
+    gtk_style_context_add_provider_for_display(display, GTK_STYLE_PROVIDER(w->theme_provider),
+                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION - 1);
 }
+
 typedef struct {
     Window *w;
     GtkWidget *window, *video, *audio, *quality, *concurrency, *theme, *notify, *open;
@@ -638,7 +651,13 @@ static void theme_clicked(GtkButton *b, gpointer data) {
     (void)b;
     Window *w = data;
     gboolean dark = FALSE;
-    g_object_get(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", &dark, NULL);
+    GdkRGBA background;
+    if (gtk_style_context_lookup_color(gtk_widget_get_style_context(w->window), "theme_bg_color",
+                                       &background))
+        dark = 0.2126 * background.red + 0.7152 * background.green + 0.0722 * background.blue < 0.5;
+    else
+        g_object_get(gtk_settings_get_for_display(gtk_widget_get_display(w->window)),
+                     "gtk-application-prefer-dark-theme", &dark, NULL);
     g_free(w->prefs->theme);
     w->prefs->theme = g_strdup(dark ? "light" : "dark");
     apply_theme(w);
@@ -673,6 +692,11 @@ static gboolean await_close(gpointer data) {
     g_array_unref(w->heights);
     g_ptr_array_unref(w->checks);
     g_free(w->analyzed_url);
+    if (w->theme_provider) {
+        gtk_style_context_remove_provider_for_display(gtk_widget_get_display(w->window),
+                                                      GTK_STYLE_PROVIDER(w->theme_provider));
+        g_clear_object(&w->theme_provider);
+    }
     gtk_window_destroy(GTK_WINDOW(w->window));
     g_free(w);
     return G_SOURCE_REMOVE;

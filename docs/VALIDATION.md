@@ -129,3 +129,18 @@ successfully, reusing the already downloaded video track. ffprobe confirmed both
 streams. SHA-256 hashes of the copied audio packet payloads in the final MKV and
 a separate download of the original Spanish `140-1` track match exactly.
 The test files remain in ignored `.tools/audio-language-test/`.
+
+## Light/dark appearance regression
+
+The host desktop uses `Yaru-dark`; merely setting GTK’s dark preference cannot
+switch a dark-only theme to light. Explicit choices now load GTK’s built-in
+Adwaita variant above desktop styling and below application CSS. System mode
+removes the override. The button checks the rendered theme background to choose
+the opposite appearance and preserves the choice in preferences.
+GTK regression tests click the actual button twice and assert visible background
+colors and saved preferences for both states. The CI GUI suite forces
+`GTK_THEME=Adwaita:dark` to reproduce the original problem.
+Local button tests passed with both `GTK_THEME=Adwaita:dark` and
+`GTK_THEME=Yaru-dark`. A separate restart with a forced light desktop theme
+verified that the previously saved dark appearance takes effect at startup.
+The isolated-config tests did not change the user's desktop or app preferences.

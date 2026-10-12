@@ -24,7 +24,7 @@ jobs:
           meson compile -C build-asan
           meson test -C build-asan --print-errorlogs
       - name: Real media integration and GUI tests
-        run: dbus-run-session -- xvfb-run -a env MD_TEST_UI=1 G_DEBUG=fatal-warnings GDK_BACKEND=x11 GSK_RENDERER=cairo python3 tests/run-integration.py
+        run: dbus-run-session -- xvfb-run -a env MD_TEST_UI=1 GTK_THEME=Adwaita:dark G_DEBUG=fatal-warnings GDK_BACKEND=x11 GSK_RENDERER=cairo python3 tests/run-integration.py
       - run: scripts/build-deb.sh build
       - name: Verify APT install, non-root launch and removal
         run: docker run --rm --init -v "$PWD/dist:/packages:ro" -v "$PWD/scripts/verify-package.sh:/verify-package.sh:ro" ubuntu:24.04 sh /verify-package.sh /packages/media-downloader-gtk_1.0.0-1_amd64.deb

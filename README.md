@@ -96,6 +96,11 @@ uses those local tools. They are not bundled or required by a normal build.
 4. For playlists, select items and confirm adding them to the queue.
 5. Use the row controls to cancel, retry, open the folder or remove finished rows.
 
+Explicit light/dark choices use GTK’s built-in theme variants so they also work
+with a dark-only desktop theme or a forced `GTK_THEME`. The theme button toggles
+the visible appearance and saves the choice. Selecting **Sistema** in preferences
+restores the desktop theme.
+
 Progress accumulates across tracks and never decreases within an attempt, even when
 yt-dlp revises size estimates. Fragmented downloads use the completed fragment
 count while their byte total remains estimated, including initialization fragments.
@@ -232,4 +237,5 @@ lawful. This project does not bypass DRM, extract browser cookies, evade
 authentication or provide access-restriction bypass mechanisms.
 
 Source repository: [ingferchorojas/media-downloader-gtk](https://github.com/ingferchorojas/media-downloader-gtk).
-No stable public release has been published yet.
+Published release: [v1.0.0](https://github.com/ingferchorojas/media-downloader-gtk/releases/tag/v1.0.0).
+Later fixes in `main` are available in locally built packages until a new release is published.

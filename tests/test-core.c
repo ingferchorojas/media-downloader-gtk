@@ -47,6 +47,40 @@ static void monotonic_progress(void) {
     g_assert_cmpuint(g_hash_table_size(j->track_progress), ==, 0);
     md_manager_free(m);
 }
+static void fragment_progress(void) {
+    MdManager *m = md_manager_new(NULL, NULL);
+    MdJob *j = md_manager_add(m, "https://example.com", "test", "/tmp", "mp4", 0);
+    j->expected_tracks = 2;
+    /* Actual first event from YouTube video 7mtza4rqxTo. */
+    MdProgress p;
+    g_assert_true(md_progress_parse(
+        "MD_PROGRESS:{\"status\":\"downloading\",\"downloaded_bytes\":712,"
+        "\"total_bytes_estimate\":712,\"fragment_index\":0,\"fragment_count\":255,"
+        "\"filename\":\"video.f270.mp4\"}",
+        &p));
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->fraction, ==, 0);
+    p.fragment = 1;
+    p.total = 363120;
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475 / 255, 0.000001);
+    p.downloaded = 1736;
+    p.total = 90780;
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475 / 255, 0.000001);
+    p.fragment = 128;
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475 * 128 / 255, 0.000001);
+    p.fragment = 127;
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475 * 128 / 255, 0.000001);
+    g_free(p.status);
+    p.status = g_strdup("finished");
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475, 0.000001);
+    md_progress_clear(&p);
+    md_manager_free(m);
+}
 static void urls(void) {
     g_assert_true(md_url_valid("https://example.com/a?x=1"));
     g_assert_false(md_url_valid("file:///etc/passwd"));
@@ -371,6 +405,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/errors/messages", errors);
     g_test_add_func("/download/progress", progress);
     g_test_add_func("/download/monotonic", monotonic_progress);
+    g_test_add_func("/download/fragment-estimate", fragment_progress);
     g_test_add_func("/updates/version-order", versions);
     g_test_add_func("/updates/releases", releases);
     g_test_add_func("/updates/checksums", checksums);

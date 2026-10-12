@@ -16,6 +16,8 @@ static void changed(MdJob *j, gpointer data) {
     if (j->state != MD_COMPLETED)
         g_assert_cmpfloat(j->fraction, <, 1);
     *previous = j->fraction;
+    if (g_getenv("MD_TRACE_PROGRESS") && j->detail)
+        g_print("Progress %.6f: %s · %s\n", j->fraction, md_state_name(j->state), j->detail);
     max_active = MAX(max_active, j->manager->active);
     g_assert_cmpuint(j->manager->active, <=, j->manager->limit);
     if (j->state == MD_DOWNLOADING && j->detail) {
@@ -51,7 +53,10 @@ int main(int argc, char **argv) {
         g_assert_cmpint(g_mkdir_with_parents(dir, 0700), ==, 0);
         md_manager_add(m, argv[1], "Generated test media", dir, argv[3], 0);
     }
-    guint timer = g_timeout_add_seconds(60, timeout, m);
+    guint seconds = g_getenv("MD_INTEGRATION_TIMEOUT")
+                        ? (guint)g_ascii_strtoull(g_getenv("MD_INTEGRATION_TIMEOUT"), NULL, 10)
+                        : 60;
+    guint timer = g_timeout_add_seconds(seconds, timeout, m);
     md_manager_schedule(m);
     g_main_loop_run(loop);
     g_source_remove(timer);

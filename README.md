@@ -97,7 +97,9 @@ uses those local tools. They are not bundled or required by a normal build.
 5. Use the row controls to cancel, retry, open the folder or remove finished rows.
 
 Progress accumulates across tracks and never decreases within an attempt, even when
-yt-dlp revises size estimates. Downloads occupy 95% of the bar; processing retains
+yt-dlp revises size estimates. Fragmented downloads use the completed fragment
+count while their byte total remains estimated, including initialization fragments.
+Downloads occupy 95% of the bar; processing retains
 that progress until successful completion reaches 100%. Per-track sizes remain visible.
 Unknown values are shown as `—`. Cancellation preserves partial files for retries.
 Filenames retain spaces and Unicode; yt-dlp still sanitizes characters that cannot

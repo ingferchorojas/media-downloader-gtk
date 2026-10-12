@@ -93,6 +93,11 @@ void md_job_apply_progress(MdJob *j, const MdProgress *p) {
     }
     if (g_strcmp0(p->status, "finished") == 0)
         *track = 1;
+    /* Fragment downloaders initially report the initialization fragment's size
+     * as the entire estimate (e.g. 712 / 712 bytes). Completed fragments provide
+     * a stable denominator until a reliable total or the final event is known. */
+    else if (p->estimated && p->fragments > 0)
+        *track = MAX(*track, CLAMP((gdouble)p->fragment / p->fragments, 0, 1));
     else if (p->total > 0 && p->downloaded >= 0)
         *track = MAX(*track, CLAMP(p->downloaded / p->total, 0, 1));
     gdouble sum = 0;

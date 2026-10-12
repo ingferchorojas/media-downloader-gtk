@@ -9,7 +9,7 @@ no host packages or global system settings were changed.
 
 - C11 compilation in debug, optimized release and ASan/UBSan configurations,
   with project warnings treated as errors.
-- 18 GLib unit tests, including metadata, playlists, container compatibility,
+- 19 GLib unit tests, including metadata, playlists, container compatibility,
   fallback/silent formats, speed units, monotonic progress across revised estimates,
   track changes and processing, queue states, retries,
   subprocess success/failure/cancellation, descendant cleanup after parent exit,
@@ -97,3 +97,13 @@ This verifies the supplied video, not every YouTube video or source website.
 Reproduction commands are in README.md. Raw development logs remain ignored in
 build directories; they are not published because Meson logs include local
 environment details.
+
+## Fragment progress regression — owner-provided video
+
+The video `7mtza4rqxTo` (THE MATRIX: La Película que Cambió al Mundo) reproduced
+an initial yt-dlp event with 712 downloaded bytes, a 712-byte estimate, zero
+completed fragments and 255 total fragments. The previous calculation incorrectly
+latched this temporary 100% track estimate at 47.5% overall. A regression test
+now reproduces this event and subsequent changes to the estimate. Fragmented
+downloads use completed fragments whenever the byte total is estimated; the
+existing monotonic accumulator and completion-only 100% remain in effect.

@@ -1,4 +1,4 @@
-# Media Downloader v1.0.0 — release preparation
+# Media Downloader v1.0.0
 
 Native C11 / GTK4 media downloader with a Spanish interface, powered by external
 yt-dlp and FFmpeg installations. Includes JSON metadata analysis, compatible
@@ -11,10 +11,9 @@ progress never decreases within an attempt; 100% is reserved for successful comp
 
 Release artifacts: architecture-specific Debian package and source code.
 
-This version is prepared locally. No public repository, version tag or release
-is created without the project owner's explicit authorization. Broad source-site
-compatibility and desktop testing must be reviewed before declaring the release
-stable. The app intentionally does not bypass DRM or authentication.
+Published on 2026-10-11 with explicit owner authorization. The Debian installer
+was produced by the successful GitHub CI build. The app does not bypass DRM or
+authentication; source-site compatibility depends on yt-dlp.
 
 Known limits: playlists are limited to the first 100 entries per analysis;
 metadata unavailable from a site remains unavailable; conversions depend on the

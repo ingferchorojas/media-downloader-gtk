@@ -110,6 +110,34 @@ static void original_audio(void) {
     g_autoptr(MdSelection) fallback = md_select_format(v, "mkv", 0, NULL);
     g_assert_cmpstr(fallback->selector, ==, "v+en");
 }
+static void display_order(void) {
+    MdManager *m = md_manager_new(NULL, NULL);
+    MdJob *done = md_manager_add(m, "https://example.com", "done", "/tmp", "mp4", 0);
+    MdJob *waiting = md_manager_add(m, "https://example.com", "waiting", "/tmp", "mp4", 0);
+    MdJob *first = md_manager_add(m, "https://example.com", "first", "/tmp", "mp4", 0);
+    MdJob *second = md_manager_add(m, "https://example.com", "second", "/tmp", "mp4", 0);
+    done->state = MD_COMPLETED;
+    first->state = MD_DOWNLOADING;
+    second->state = MD_CONVERTING;
+    g_autoptr(GPtrArray) order = md_manager_display_order(m);
+    g_assert_true(g_ptr_array_index(order, 0) == first);
+    g_assert_true(g_ptr_array_index(order, 1) == second);
+    g_assert_true(g_ptr_array_index(order, 2) == done);
+    g_assert_true(g_ptr_array_index(m->jobs, 0) == done);
+    g_clear_pointer(&order, g_ptr_array_unref);
+    first->from_playlist = TRUE;
+    second->from_playlist = TRUE;
+    order = md_manager_display_order(m);
+    for (guint i = 0; i < m->jobs->len; i++)
+        g_assert_true(g_ptr_array_index(order, i) == g_ptr_array_index(m->jobs, i));
+    g_clear_pointer(&order, g_ptr_array_unref);
+    first->state = MD_COMPLETED;
+    second->state = MD_COMPLETED;
+    waiting->state = MD_ANALYZING;
+    order = md_manager_display_order(m);
+    g_assert_true(g_ptr_array_index(order, 0) == waiting);
+    md_manager_free(m);
+}
 static void urls(void) {
     g_assert_true(md_url_valid("https://example.com/a?x=1"));
     g_assert_false(md_url_valid("file:///etc/passwd"));
@@ -441,6 +469,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/updates/checksums", checksums);
     g_test_add_func("/updates/atomic-install-rollback", atomic_update);
     g_test_add_func("/manager/queue", queue);
+    g_test_add_func("/manager/display-order", display_order);
     g_test_add_func("/process/success", process_success);
     g_test_add_func("/process/failure", process_failure);
     g_test_add_func("/process/cancel", process_cancel);

@@ -15,7 +15,7 @@ typedef struct {
     GtkWidget *window, *url, *analyze, *spinner, *message, *title, *meta, *picture, *placeholder,
         *format, *quality, *hint, *destination, *download, *playlist, *list, *counter,
         *engine_update_label, *app_update_label, *engine_update_button, *app_update_button,
-        *check_updates_button;
+        *check_updates_button, *clear_downloads_button;
     MdPreferences *prefs;
     GtkCssProvider *theme_provider;
     MdManager *manager;
@@ -130,21 +130,49 @@ static void row_open(GtkButton *b, gpointer data) {
     MdJob *j = ((Row *)data)->job;
     open_folder_path(j->manager->data, j->directory);
 }
+static void refresh_download_list(Window *w) {
+    g_autoptr(GPtrArray) order = md_manager_display_order(w->manager);
+    GtkWidget *previous = NULL;
+    gboolean can_clear = FALSE;
+    for (guint i = 0; i < order->len; i++) {
+        MdJob *job = g_ptr_array_index(order, i);
+        Row *row = job->ui;
+        if (row) {
+            gtk_box_reorder_child_after(GTK_BOX(w->list), row->box, previous);
+            previous = row->box;
+        }
+        can_clear |= md_state_terminal(job->state);
+    }
+    gtk_widget_set_sensitive(w->clear_downloads_button, can_clear && !w->closing);
+    g_autofree gchar *counter =
+        g_strdup_printf("%u elementos · %u activos", w->manager->jobs->len, w->manager->active);
+    gtk_label_set_text(GTK_LABEL(w->counter), counter);
+}
+static void remove_job_row(Window *w, MdJob *job) {
+    Row *row = job->ui;
+    gtk_box_remove(GTK_BOX(w->list), row->box);
+    job->ui = NULL;
+    md_manager_remove(w->manager, job);
+    g_free(row);
+}
 static void row_remove(GtkButton *b, gpointer data) {
     (void)b;
-    Row *r = data;
-    MdJob *j = r->job;
-    Window *w = j->manager->data;
-    GtkWidget *widget = r->box;
-    if (!md_state_terminal(j->state))
+    MdJob *job = ((Row *)data)->job;
+    Window *w = job->manager->data;
+    if (!md_state_terminal(job->state))
         return;
-    gtk_box_remove(GTK_BOX(w->list), widget);
-    j->ui = NULL;
-    md_manager_remove(w->manager, j);
-    g_free(r);
-    g_autofree gchar *text =
-        g_strdup_printf("%u elementos · %u activos", w->manager->jobs->len, w->manager->active);
-    gtk_label_set_text(GTK_LABEL(w->counter), text);
+    remove_job_row(w, job);
+    refresh_download_list(w);
+}
+static void clear_downloads(GtkButton *button, gpointer data) {
+    (void)button;
+    Window *w = data;
+    for (guint i = w->manager->jobs->len; i > 0; i--) {
+        MdJob *job = g_ptr_array_index(w->manager->jobs, i - 1);
+        if (md_state_terminal(job->state))
+            remove_job_row(w, job);
+    }
+    refresh_download_list(w);
 }
 static void job_changed(MdJob *j, gpointer data) {
     Window *w = data;
@@ -167,9 +195,7 @@ static void job_changed(MdJob *j, gpointer data) {
     gtk_widget_set_sensitive(r->cancel, !md_state_terminal(j->state));
     gtk_widget_set_visible(r->retry, j->state == MD_ERROR || j->state == MD_CANCELLED);
     gtk_widget_set_visible(r->remove, md_state_terminal(j->state));
-    g_autofree gchar *counter =
-        g_strdup_printf("%u elementos · %u activos", w->manager->jobs->len, w->manager->active);
-    gtk_label_set_text(GTK_LABEL(w->counter), counter);
+    refresh_download_list(w);
     if (j->state == MD_COMPLETED && !r->notified && !w->closing) {
         r->notified = TRUE;
         if (w->prefs->notify) {
@@ -184,6 +210,7 @@ static void job_changed(MdJob *j, gpointer data) {
 static void add_job(Window *w, MdVideo *v) {
     MdJob *j = md_manager_add(w->manager, v->url, v->title, w->prefs->directory,
                               selected_container(w), selected_height(w));
+    j->from_playlist = w->video && w->video->entries->len > 0;
     Row *r = g_new0(Row, 1);
     r->job = j;
     j->ui = r;
@@ -1018,8 +1045,16 @@ void md_window_present(GtkApplication *application) {
     w->counter = label("0 elementos · 0 activos", "dim-label");
     gtk_box_append(GTK_BOX(listhead), listtitle);
     gtk_box_append(GTK_BOX(listhead), w->counter);
+    w->clear_downloads_button = gtk_button_new_with_label("Limpiar descargas");
+    gtk_widget_set_tooltip_text(
+        w->clear_downloads_button,
+        "Quitar las completadas, canceladas y con error. Conservar archivos y descargas activas.");
+    gtk_widget_set_sensitive(w->clear_downloads_button, FALSE);
+    g_signal_connect(w->clear_downloads_button, "clicked", G_CALLBACK(clear_downloads), w);
+    gtk_box_append(GTK_BOX(listhead), w->clear_downloads_button);
     gtk_box_append(GTK_BOX(content), listhead);
     w->list = box(GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_set_name(w->list, "download-list");
     gtk_box_append(GTK_BOX(content), w->list);
     gtk_box_append(
         GTK_BOX(content),

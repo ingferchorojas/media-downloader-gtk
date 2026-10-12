@@ -22,6 +22,17 @@ static GtkWidget *find_widget(GtkWidget *root, GType type, const gchar *text) {
     }
     return NULL;
 }
+static GtkWidget *download_list(GtkWidget *root) {
+    if (g_strcmp0(gtk_widget_get_name(root), "download-list") == 0)
+        return root;
+    for (GtkWidget *child = gtk_widget_get_first_child(root); child;
+         child = gtk_widget_get_next_sibling(child)) {
+        GtkWidget *found = download_list(child);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
 static GtkWidget *theme_button(GtkWidget *root) {
     if (GTK_IS_BUTTON(root) &&
         g_strcmp0(gtk_widget_get_tooltip_text(root), "Alternar tema claro y oscuro") == 0)
@@ -145,9 +156,31 @@ static gboolean drive(gpointer data) {
         GtkWidget *picture = find_widget(root, GTK_TYPE_PICTURE, NULL);
         if (!gtk_picture_get_paintable(GTK_PICTURE(picture)))
             return G_SOURCE_CONTINUE;
+        GtkWidget *download = find_widget(root, GTK_TYPE_BUTTON, "Descargar");
+        g_signal_emit_by_name(download, "clicked");
+        GtkWidget *list = download_list(root);
+        GtkWidget *first = gtk_widget_get_first_child(list);
+        g_assert_nonnull(find_widget(first, GTK_TYPE_LABEL, "Analizando"));
+        g_assert_nonnull(
+            find_widget(gtk_widget_get_next_sibling(first), GTK_TYPE_LABEL, "Completado"));
+        GtkWidget *clear = find_widget(root, GTK_TYPE_BUTTON, "Limpiar descargas");
+        g_assert_true(gtk_widget_get_sensitive(clear));
+        g_signal_emit_by_name(clear, "clicked");
+        g_assert_true(gtk_widget_get_first_child(list) == first);
+        g_assert_null(gtk_widget_get_next_sibling(first));
+        g_assert_false(gtk_widget_get_sensitive(clear));
+        g_assert_nonnull(find_widget(root, GTK_TYPE_LABEL, "1 elementos"));
         step++;
     } else if (step == 3) {
+        if (!find_widget(root, GTK_TYPE_LABEL, "Completado"))
+            return G_SOURCE_CONTINUE;
         capture(window);
+        GtkWidget *clear = find_widget(root, GTK_TYPE_BUTTON, "Limpiar descargas");
+        g_assert_true(gtk_widget_get_sensitive(clear));
+        g_signal_emit_by_name(clear, "clicked");
+        g_assert_null(gtk_widget_get_first_child(download_list(root)));
+        g_assert_nonnull(find_widget(root, GTK_TYPE_LABEL, "0 elementos"));
+        g_assert_false(gtk_widget_get_sensitive(clear));
         gtk_window_close(window);
         return G_SOURCE_REMOVE;
     }

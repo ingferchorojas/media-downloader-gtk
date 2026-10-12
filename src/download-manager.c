@@ -271,3 +271,22 @@ void md_manager_free(MdManager *m) {
     g_ptr_array_unref(m->jobs);
     g_free(m);
 }
+
+GPtrArray *md_manager_display_order(MdManager *m) {
+    GPtrArray *order = g_ptr_array_new();
+    gboolean playlist_pending = FALSE;
+    for (guint i = 0; i < m->jobs->len; i++) {
+        MdJob *j = g_ptr_array_index(m->jobs, i);
+        if (j->from_playlist && !md_state_terminal(j->state))
+            playlist_pending = TRUE;
+    }
+    for (guint pass = 0; pass < (playlist_pending ? 1u : 2u); pass++) {
+        for (guint i = 0; i < m->jobs->len; i++) {
+            MdJob *j = g_ptr_array_index(m->jobs, i);
+            gboolean active = j->state != MD_QUEUED && !md_state_terminal(j->state);
+            if (playlist_pending || active == (pass == 0))
+                g_ptr_array_add(order, j);
+        }
+    }
+    return order;
+}

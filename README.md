@@ -95,6 +95,13 @@ uses those local tools. They are not bundled or required by a normal build.
 3. Select a writable destination folder and press **Descargar**.
 4. For playlists, select items and confirm adding them to the queue.
 5. Use the row controls to cancel, retry, open the folder or remove finished rows.
+6. **Limpiar descargas** removes all completed, cancelled and failed rows while
+   keeping active/queued downloads and saved files. The button is available when
+   there are finished rows to remove.
+
+Individual active downloads appear first in stable queue order. While a playlist
+has unfinished entries, rows retain their original queue order. This presentation
+order never changes download scheduling.
 
 Explicit light/dark choices use GTK’s built-in theme variants so they also work
 with a dark-only desktop theme or a forced `GTK_THEME`. The theme button toggles

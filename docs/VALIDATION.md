@@ -9,7 +9,7 @@ no host packages or global system settings were changed.
 
 - C11 compilation in debug, optimized release and ASan/UBSan configurations,
   with project warnings treated as errors.
-- 20 GLib unit tests, including metadata, playlists, container compatibility,
+- 21 GLib unit tests, including metadata, playlists, container compatibility,
   fallback/silent formats, speed units, monotonic progress across revised estimates,
   track changes and processing, queue states, retries,
   subprocess success/failure/cancellation, descendant cleanup after parent exit,
@@ -144,3 +144,14 @@ Local button tests passed with both `GTK_THEME=Adwaita:dark` and
 `GTK_THEME=Yaru-dark`. A separate restart with a forced light desktop theme
 verified that the previously saved dark appearance takes effect at startup.
 The isolated-config tests did not change the user's desktop or app preferences.
+
+## Queue cleanup and active download ordering
+
+A new manager display-order test verifies that individual active downloads move
+ahead of old/queued rows, concurrent downloads retain stable relative order,
+playlist rows retain queue order while pending, and scheduling order is unchanged.
+The GTK test downloads local generated media, starts a second job and verifies
+that its row appears first. It clicks **Limpiar descargas** during analysis,
+checks that only the finished row is removed and the active row survives, then
+clears the final completed row and checks the empty list and disabled button.
+The harness confirms the saved media still exists after clearing the queue.

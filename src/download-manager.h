@@ -21,6 +21,7 @@ typedef struct {
     gdouble fraction;
     GHashTable *track_progress;
     guint expected_tracks;
+    gboolean from_playlist;
     MdProcess *process;
     GCancellable *cancel;
     gpointer ui;
@@ -45,3 +46,6 @@ const gchar *md_state_name(MdState state);
 gboolean md_state_terminal(MdState state);
 
 void md_job_apply_progress(MdJob *job, const MdProgress *progress);
+
+/* Borrowed jobs in display order; does not change scheduling order. */
+GPtrArray *md_manager_display_order(MdManager *manager);

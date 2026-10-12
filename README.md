@@ -179,4 +179,5 @@ terms and applicable law. Personal use does not automatically make downloading
 lawful. This project does not bypass DRM, extract browser cookies, evade
 authentication or provide access-restriction bypass mechanisms.
 
-No stable public release or repository has been published yet.
+Source repository: [ingferchorojas/media-downloader-gtk](https://github.com/ingferchorojas/media-downloader-gtk).
+No stable public release has been published yet.

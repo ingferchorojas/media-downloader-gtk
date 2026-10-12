@@ -41,8 +41,9 @@ no host packages or global system settings were changed.
   still need owner review. The first 100 items per analysis are supported.
 - Debian-specific binaries and installation have not been tested on Debian itself.
   Build there to obtain the correct ABI dependency names.
-- GitHub Actions workflows are prepared but cannot have run on GitHub before
-  repository publication. No remote repository, tag or Release has been created.
+- The public repository was created with owner authorization on 2026-10-11.
+  GitHub Actions run on pushes to main; check the Actions tab for remote results.
+  No version tag or Release has been created.
 - Release metadata uses the planned 1.0.0 version; this is release preparation,
   not a claim that broad stable-release acceptance testing is complete.
 

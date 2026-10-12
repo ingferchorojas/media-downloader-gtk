@@ -23,13 +23,16 @@ interface is in Spanish; contributor documentation is in English.
   settings; completion notifications and optional folder opening.
 - MIT-licensed original code and icon. yt-dlp and FFmpeg remain external dependencies.
 
-![Application with locally generated test media](docs/images/main-window.png)
+![Completed MP3 download from the owner-provided YouTube URL](docs/images/main-window.png)
 
 ## Requirements
 
 Ubuntu 24.04 or a compatible Debian-based distribution, GTK >= 4.6,
 GLib / GIO >= 2.70, JSON-GLib >= 1.6, yt-dlp >= 2023.03.04 and FFmpeg.
 Source sites evolve: use an appropriately maintained yt-dlp installation.
+For current YouTube extraction, yt-dlp also needs its EJS components and a
+supported JavaScript runtime; see the [upstream EJS setup guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+These are external engine requirements; the application and interface remain C11.
 The Ubuntu-built `.deb` uses Ubuntu ABI package names; build a package on Debian
 for Debian rather than assuming Ubuntu binaries are interchangeable.
 

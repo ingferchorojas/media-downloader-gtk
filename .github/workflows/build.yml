@@ -14,7 +14,7 @@ jobs:
       - name: Install build and test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential meson ninja-build pkg-config libgtk-4-dev libjson-glib-dev yt-dlp ffmpeg dpkg-dev desktop-file-utils xvfb dbus-x11
+          sudo apt-get install -y build-essential meson ninja-build pkg-config libgtk-4-dev libjson-glib-dev yt-dlp ffmpeg dpkg-dev desktop-file-utils xvfb dbus-x11 at-spi2-core
       - run: meson setup build --prefix=/usr --buildtype=release
       - run: meson compile -C build
       - run: meson test -C build --print-errorlogs

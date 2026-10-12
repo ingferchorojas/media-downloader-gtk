@@ -43,7 +43,10 @@ static void capture(GtkWindow *window) {
 static gboolean drive(gpointer data) {
     (void)data;
     ticks++;
-    if (ticks > 900)
+    guint timeout = g_getenv("MD_UI_TIMEOUT")
+                        ? (guint)g_ascii_strtoull(g_getenv("MD_UI_TIMEOUT"), NULL, 10) * 10
+                        : 900;
+    if (ticks > timeout)
         g_error("UI integration timed out at step %u", step);
     GtkWindow *window = gtk_application_get_active_window(app);
     g_assert_nonnull(window);
@@ -62,7 +65,13 @@ static gboolean drive(gpointer data) {
         GtkWidget *download = find_widget(root, GTK_TYPE_BUTTON, "Descargar");
         if (!gtk_widget_get_sensitive(download))
             return G_SOURCE_CONTINUE;
-        g_assert_nonnull(find_widget(root, GTK_TYPE_LABEL, "own-test"));
+        const gchar *expected = g_getenv("MD_UI_TITLE");
+        g_assert_nonnull(find_widget(root, GTK_TYPE_LABEL, expected ? expected : "own-test"));
+        if (g_getenv("MD_UI_AUDIO")) {
+            GtkWidget *format = find_widget(root, GTK_TYPE_DROP_DOWN, NULL);
+            gtk_drop_down_set_selected(GTK_DROP_DOWN(format), 3);
+            g_assert_true(gtk_widget_get_sensitive(download));
+        }
         g_signal_emit_by_name(download, "clicked");
         step++;
     } else if (step == 2) {

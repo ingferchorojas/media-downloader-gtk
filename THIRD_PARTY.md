@@ -17,3 +17,8 @@ libraries. yt-dlp and FFmpeg run as external system programs. Redistributors
 must respect the license and source availability requirements of any dependency
 binaries they separately distribute. Debian copyright information is normally
 available in /usr/share/doc/<package>/copyright.
+
+The README screenshot displays metadata and a thumbnail from the owner-provided
+YouTube video. Third-party media and artwork shown in that screenshot retain
+their respective rights and are not covered by the application's MIT license.
+The downloaded MP3 is not included in the repository or package.

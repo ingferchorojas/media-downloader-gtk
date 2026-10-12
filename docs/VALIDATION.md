@@ -23,13 +23,30 @@ no host packages or global system settings were changed.
   without reported errors, plus optimized-release integration.
 - GTK widgets on an isolated Xvfb display with fatal GLib warnings: analysis,
   enabled/disabled controls, downloaded and converted thumbnail, download,
-  completion and clean close. Screenshot shows only generated test content.
+  completion and clean close. The initial screenshot used generated test content.
 - Debian package creation, contents inspection and dynamic dependency generation.
 - APT installation in disposable Ubuntu 24.04 containers, desktop-file validation,
   linkage checks, startup as an unprivileged test user, and APT purge with removal
   of the binary, desktop entry and icon. The same packaging procedure was verified
   before the final optimization and presentation refinements; final release
   artifacts are also staged and inspected locally.
+
+## Owner-requested real YouTube MP3 test
+
+On 2026-10-11, the owner-provided video `1AopjlDWJ8o` was analyzed and downloaded
+through the actual GTK interface as MP3 into the requested Downloads folder.
+The radio/playlist parameters were omitted so only that video was downloaded.
+ffprobe confirmed one MP3 audio stream, no video stream, duration 229.564 seconds
+and size 6,639,177 bytes. The README screenshot records the completed job.
+The downloaded audio remains outside the repository.
+
+The system yt-dlp 2025.09.05 failed YouTube extraction. The successful test used
+a workspace-only official yt-dlp 2026.08.19 executable (SHA-256 checked against
+the release checksum list), its bundled EJS components, and already-installed
+Node 22.23.3. Node was explicitly enabled for the test through a local launcher.
+No system installation was modified, and no cookies or authentication bypasses
+were used. Consult the upstream EJS guide for current engine setup requirements.
+This verifies the supplied video, not every YouTube video or source website.
 
 ## Practical limits / not verified
 

@@ -3,7 +3,8 @@
 typedef struct {
     gchar *directory, *video, *audio, *theme;
     gint quality;
-    guint concurrency;
+    guint concurrency, retries;
+    gboolean number_playlist;
     gboolean notify, open_folder;
 } MdPreferences;
 MdPreferences *md_preferences_load(void);

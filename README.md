@@ -12,8 +12,8 @@ interface is in Spanish; contributor documentation is in English.
 - MP4, WebM and MKV with compatible codec selection. Only reported video
   resolutions are offered; incompatible selections display an explanation.
 - MP3, M4A, Opus, FLAC and WAV extraction using FFmpeg, with installed encoder checks.
-- Structured `--progress-template` JSON: current-track bytes, speed, ETA,
-  fragments and postprocessing stages. A job completes only after process exit
+- Structured `--progress-template` JSON: cumulative bytes, total download size, speed, ETA,
+  fragments and postprocessing stages. A job completes only after format verification and process exit
   and output draining, including FFmpeg processing.
 - Concurrent queue (two downloads by default, configurable from one to eight),
   cancellation of process groups, retry, open destination and remove list items.
@@ -93,11 +93,25 @@ uses those local tools. They are not bundled or required by a normal build.
 2. Review the metadata, format and available resolution. The musical-note button
    selects the preferred audio format from preferences.
 3. Select a writable destination folder and press **Descargar**.
-4. For playlists, select items and confirm adding them to the queue.
-5. Use the row controls to cancel, retry, open the folder or remove finished rows.
-6. **Limpiar descargas** removes all completed, cancelled and failed rows while
+4. Choose **Reintentos automáticos** (1–10 retries after a failure).
+   The setting is saved and applies to the download, its fragments and failed
+   processing. Temporary metadata/connection failures also retry automatically.
+   Retries wait 3, 6, 12 and 24 seconds, then at most 30 seconds between attempts;
+   cancellation stops pending retries. Processing retries reuse the same staged downloads and stop after
+   the selected number of additional attempts. The row's
+   retry button also uses the current setting.
+5. For playlists, select items and optionally enable **Numerar videos automáticamente**
+   before confirming the queue. Names receive prefixes such as `001 -`, preserving
+   original playlist positions even when only some entries are selected.
+6. Use the row controls to cancel, retry, open the folder or remove finished rows.
+7. **Limpiar descargas** removes all completed, cancelled and failed rows while
    keeping active/queued downloads and saved files. The button is available when
    there are finished rows to remove.
+
+Closing with unfinished downloads asks for confirmation. **Cancelar todas** appears
+only when at least two jobs are unfinished, includes waiting jobs, and asks for
+confirmation before cancelling. Declining either dialog leaves downloads running;
+completed files are kept, and new jobs can be queued after cancelling a batch.
 
 Individual active downloads appear first in stable queue order. While a playlist
 has unfinished entries, rows retain their original queue order. This presentation
@@ -108,11 +122,24 @@ with a dark-only desktop theme or a forced `GTK_THEME`. The theme button toggles
 the visible appearance and saves the choice. Selecting **Sistema** in preferences
 restores the desktop theme.
 
-Progress accumulates across tracks and never decreases within an attempt, even when
-yt-dlp revises size estimates. Fragmented downloads use the completed fragment
-count while their byte total remains estimated, including initialization fragments.
-Downloads occupy 95% of the bar; processing retains
-that progress until successful completion reaches 100%. Per-track sizes remain visible.
+Each queued playlist item keeps the selected output format. Downloads and
+conversion run in a private hidden staging folder inside the destination.
+Before publishing the result, FFprobe checks its extension, container and streams;
+audio output must use the requested codec and contain no video stream (cover art
+is allowed). A failed or skipped conversion is an error, never a completed video
+in an audio queue. Existing valid files are preserved; conflicting invalid files
+are reported rather than overwritten. Failed jobs retain staged files for retry.
+
+Progress uses cumulative downloaded bytes divided by the combined size of the selected
+video and audio tracks. Metadata provides exact sizes, approximate sizes, or a
+bitrate/duration estimate. The first available combined total stays fixed during
+the download and is marked with `≈` when estimated. It is updated to the actual
+download size once all tracks finish. When any track size is unavailable, the total is shown as `—`
+and the bar falls back to per-track progress (fragment counts for estimated
+fragmented streams). Progress never decreases within an attempt. The bar is capped
+at 99% until processing finishes and the downloader exits successfully.
+The displayed total describes the download; merging or conversion can change the
+final file size. Remaining time uses all remaining bytes and the current speed.
 Unknown values are shown as `—`. Cancellation preserves partial files for retries.
 Audio selection respects yt-dlp’s original/default language preference before
 comparing bitrate. When provided by the source, the selected audio language is

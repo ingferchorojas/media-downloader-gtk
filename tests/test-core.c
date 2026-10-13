@@ -14,13 +14,13 @@ static void monotonic_progress(void) {
     j->expected_tracks = 2;
     MdProgress p = {.filename = "video", .downloaded = 80, .total = 100};
     md_job_apply_progress(j, &p);
-    g_assert_cmpfloat_with_epsilon(j->fraction, 0.38, 0.00001);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.4, 0.00001);
     p.total = 200;
     md_job_apply_progress(j, &p);
-    g_assert_cmpfloat_with_epsilon(j->fraction, 0.38, 0.00001);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.4, 0.00001);
     p.status = "finished";
     md_job_apply_progress(j, &p);
-    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475, 0.00001);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.5, 0.00001);
     p.filename = "audio";
     p.status = "downloading";
     p.downloaded = 10;
@@ -36,7 +36,7 @@ static void monotonic_progress(void) {
     g_assert_cmpfloat(j->fraction, ==, previous);
     p.status = "finished";
     md_job_apply_progress(j, &p);
-    g_assert_cmpfloat_with_epsilon(j->fraction, 0.95, 0.00001);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.99, 0.00001);
     p.stage = "Merger";
     md_job_apply_progress(j, &p);
     g_assert_cmpfloat(j->fraction, <, 1);
@@ -63,22 +63,103 @@ static void fragment_progress(void) {
     p.fragment = 1;
     p.total = 363120;
     md_job_apply_progress(j, &p);
-    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475 / 255, 0.000001);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.5 / 255, 0.000001);
     p.downloaded = 1736;
     p.total = 90780;
     md_job_apply_progress(j, &p);
-    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475 / 255, 0.000001);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.5 / 255, 0.000001);
     p.fragment = 128;
     md_job_apply_progress(j, &p);
-    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475 * 128 / 255, 0.000001);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.5 * 128 / 255, 0.000001);
     p.fragment = 127;
     md_job_apply_progress(j, &p);
-    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475 * 128 / 255, 0.000001);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.5 * 128 / 255, 0.000001);
     g_free(p.status);
     p.status = g_strdup("finished");
     md_job_apply_progress(j, &p);
-    g_assert_cmpfloat_with_epsilon(j->fraction, 0.475, 0.000001);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.5, 0.000001);
     md_progress_clear(&p);
+    md_manager_free(m);
+}
+static void weighted_progress(void) {
+    g_autoptr(MdVideo) v = md_video_parse(
+        "{\"title\":\"Weighted\",\"duration\":10,\"formats\":["
+        "{\"format_id\":\"v\",\"ext\":\"mp4\",\"height\":1080,\"vcodec\":\"avc1\","
+        "\"acodec\":\"none\",\"filesize\":900},"
+        "{\"format_id\":\"a\",\"ext\":\"m4a\",\"vcodec\":\"none\",\"acodec\":\"mp4a\","
+        "\"filesize_approx\":100}]}", NULL);
+    g_autoptr(MdSelection) s = md_select_format(v, "mp4", 1080, NULL);
+    MdManager *m = md_manager_new(NULL, NULL);
+    MdJob *j = md_manager_add(m, "https://example.com", "test", "/tmp", "mp4", 0);
+    md_job_prepare_tracks(j, s);
+    g_assert_cmpfloat(j->total_bytes, ==, 1000);
+    g_assert_true(j->total_estimated);
+    MdProgress p;
+    g_assert_true(md_progress_parse(
+        "MD_PROGRESS:{\"progress\":{\"status\":\"downloading\",\"downloaded_bytes\":450,"
+        "\"total_bytes\":900,\"filename\":\"video.mp4\"},\"format_id\":\"v\"}", &p));
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.45, 0.000001);
+    g_assert_cmpfloat(j->downloaded_bytes, ==, 450);
+    p.downloaded = 900;
+    g_free(p.status);
+    p.status = g_strdup("finished");
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.9, 0.000001);
+    md_progress_clear(&p);
+    p = (MdProgress){.format_id = "a", .downloaded = 50, .total = 100};
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.95, 0.000001);
+    g_assert_true(j->total_estimated);
+    g_assert_cmpfloat(j->downloaded_bytes, ==, 950);
+    p.downloaded = 100;
+    p.status = "finished";
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->fraction, ==, 0.99);
+    g_assert_cmpfloat(j->downloaded_bytes, ==, 1000);
+    g_assert_false(j->total_estimated);
+    /* An initialization fragment must not replace a metadata estimate. */
+    s->track_estimated[0] = TRUE;
+    md_job_prepare_tracks(j, s);
+    j->fraction = -1;
+    p = (MdProgress){.format_id = "v", .downloaded = 1, .total = 1,
+                     .estimated = TRUE, .fragments = 100};
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->total_bytes, ==, 1000);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.001, 0.000001);
+    p.fragment = 10;
+    p.downloaded = 400;
+    p.total = 1800;
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->total_bytes, ==, 1000);
+    g_assert_true(j->total_estimated);
+    p.fragment = 20;
+    p.total = 700;
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->total_bytes, ==, 1000);
+    p.downloaded = 1200;
+    p.status = "finished";
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->total_bytes, ==, 1000);
+    g_assert_true(j->total_estimated);
+    g_assert_cmpfloat(j->fraction, <, 1);
+    p = (MdProgress){.format_id = "a", .downloaded = 30, .total = 50};
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->total_bytes, ==, 1000);
+    g_assert_true(j->total_estimated);
+    p.downloaded = 130;
+    p.status = "finished";
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->total_bytes, ==, 1330);
+    g_assert_false(j->total_estimated);
+    /* Do not display a partial size as the total when audio size is missing. */
+    s->track_sizes[1] = -1;
+    md_job_prepare_tracks(j, s);
+    j->fraction = -1;
+    p = (MdProgress){.format_id = "v", .downloaded = 450, .total = 900};
+    md_job_apply_progress(j, &p);
+    g_assert_cmpfloat(j->total_bytes, ==, -1);
+    g_assert_cmpfloat_with_epsilon(j->fraction, 0.25, 0.000001);
     md_manager_free(m);
 }
 static void original_audio(void) {
@@ -211,6 +292,97 @@ static void playlist(void) {
     g_assert_cmpuint(v->entries->len, ==, 1);
     MdVideo *entry = g_ptr_array_index(v->entries, 0);
     g_assert_cmpstr(entry->url, ==, "https://example.com/own.mp4");
+    g_assert_cmpuint(entry->playlist_index, ==, 2);
+    g_autoptr(MdVideo) indexed = md_video_parse(
+        "{\"title\":\"List\",\"entries\":[{\"title\":\"Clip\","
+        "\"url\":\"https://example.com/clip\",\"playlist_index\":7}]}", NULL);
+    entry = g_ptr_array_index(indexed->entries, 0);
+    g_assert_cmpuint(entry->playlist_index, ==, 7);
+}
+static void transient_retries(void) {
+    g_assert_true(md_retryable_error("HTTP Error 429: Too Many Requests"));
+    g_assert_true(md_retryable_error("HTTP Error 503: Service Unavailable"));
+    g_assert_true(md_retryable_error("ERROR: Unable to download webpage: HTTP Error 503"));
+    g_assert_true(md_retryable_error("Connection reset by peer"));
+    g_assert_true(md_retryable_error("HTTP Error 403: Forbidden"));
+    g_assert_false(md_retryable_error("Unable to download webpage: HTTP Error 404"));
+    g_assert_false(md_retryable_error("Video unavailable"));
+    g_assert_false(md_retryable_error("FFmpeg: Permission denied"));
+    g_assert_false(md_retryable_error(NULL));
+    g_assert_cmpuint(md_retry_delay(1), ==, 3);
+    g_assert_cmpuint(md_retry_delay(2), ==, 6);
+    g_assert_cmpuint(md_retry_delay(3), ==, 12);
+    g_assert_cmpuint(md_retry_delay(4), ==, 24);
+    g_assert_cmpuint(md_retry_delay(10), ==, 30);
+}
+static void final_formats(void) {
+    g_autoptr(GError) error = NULL;
+    const gchar *mp3 = "{\"format\":{\"format_name\":\"mp3\"},"
+                       "\"streams\":[{\"codec_type\":\"audio\",\"codec_name\":\"mp3\"}]}";
+    g_assert_true(md_output_matches(mp3, "mp3", &error));
+    g_assert_false(md_output_matches(mp3, "mp4", &error));
+    g_clear_error(&error);
+    const gchar *video = "{\"format\":{\"format_name\":\"mov,mp4,m4a\"},"
+                         "\"streams\":[{\"codec_type\":\"video\",\"codec_name\":\"h264\"},"
+                         "{\"codec_type\":\"audio\",\"codec_name\":\"aac\"}]}";
+    g_assert_true(md_output_matches(video, "mp4", &error));
+    g_assert_false(md_output_matches(video, "mp3", &error));
+    g_clear_error(&error);
+    g_assert_false(md_output_matches(video, "m4a", &error));
+    g_clear_error(&error);
+    const gchar *wrong_codec = "{\"format\":{\"format_name\":\"mp3\"},"
+                               "\"streams\":[{\"codec_type\":\"audio\",\"codec_name\":\"aac\"}]}";
+    g_assert_false(md_output_matches(wrong_codec, "mp3", &error));
+    g_clear_error(&error);
+    const gchar *cover = "{\"format\":{\"format_name\":\"mp3\"},"
+                         "\"streams\":[{\"codec_type\":\"audio\",\"codec_name\":\"mp3\"},"
+                         "{\"codec_type\":\"video\",\"codec_name\":\"mjpeg\","
+                         "\"disposition\":{\"attached_pic\":1}}]}";
+    g_assert_true(md_output_matches(cover, "mp3", &error));
+    g_assert_true(md_output_matches(
+        "{\"format\":{\"format_name\":\"wav\"},\"streams\":["
+        "{\"codec_type\":\"audio\",\"codec_name\":\"pcm_s24le\"}]}", "wav", &error));
+    g_assert_true(md_output_matches(
+        "{\"format\":{\"format_name\":\"mov,mp4,m4a\"},\"streams\":["
+        "{\"codec_type\":\"audio\",\"codec_name\":\"alac\"}]}", "m4a", &error));
+    g_assert_false(md_output_matches("{}", "mp3", &error));
+    g_clear_error(&error);
+    g_assert_false(md_output_matches("[]", "mp3", &error));
+    g_clear_error(&error);
+    g_assert_false(md_output_matches("invalid", "mp3", &error));
+}
+static void cancel_all(void) {
+    MdManager *m = md_manager_new(NULL, NULL);
+    MdJob *first = md_manager_add(m, "https://example.com", "one", "/tmp", "mp3", 0);
+    MdJob *second = md_manager_add(m, "https://example.com", "two", "/tmp", "mp3", 0);
+    MdJob *done = md_manager_add(m, "https://example.com", "done", "/tmp", "mp3", 0);
+    done->state = MD_COMPLETED;
+    md_manager_cancel_all(m);
+    g_assert_cmpint(first->state, ==, MD_CANCELLED);
+    g_assert_cmpint(second->state, ==, MD_CANCELLED);
+    g_assert_cmpint(done->state, ==, MD_COMPLETED);
+    g_assert_false(m->stopping);
+    g_assert_cmpuint(m->active, ==, 0);
+    MdJob *next = md_manager_add(m, "https://example.com", "next", "/tmp", "mp3", 0);
+    g_assert_cmpint(next->state, ==, MD_QUEUED);
+    md_manager_free(m);
+}
+static void output_numbering(void) {
+    MdManager *m = md_manager_new(NULL, NULL);
+    MdJob *j = md_manager_add(m, "https://example.com", "test", "/tmp", "mp4", 0);
+    g_assert_cmpuint(j->retries, ==, 3);
+    g_autofree gchar *plain = md_job_output_template(j);
+    g_assert_cmpstr(plain, ==, "%(title).160B [%(id)s].%(ext)s");
+    j->playlist_number = 7;
+    g_autofree gchar *numbered = md_job_output_template(j);
+    g_assert_cmpstr(numbered, ==, "007 - %(title).160B [%(id)s].%(ext)s");
+    j->state = MD_CANCELLED;
+    j->retries = 1;
+    m->stopping = TRUE;
+    md_job_retry(j);
+    g_assert_cmpuint(j->playlist_number, ==, 7);
+    g_assert_cmpuint(j->retries, ==, 1);
+    md_manager_free(m);
 }
 static void errors(void) {
     g_autofree gchar *disk = md_error_message("No space left on device");
@@ -413,7 +585,11 @@ static void process_group(void) {
 }
 static void preferences(void) {
     MdPreferences *p = md_preferences_load();
+    g_assert_cmpuint(p->retries, ==, 3);
+    g_assert_false(p->number_playlist);
     p->concurrency = 3;
+    p->retries = 2;
+    p->number_playlist = TRUE;
     g_free(p->theme);
     p->theme = g_strdup("dark");
     g_autoptr(GError) e = NULL;
@@ -422,6 +598,18 @@ static void preferences(void) {
     MdPreferences *loaded = md_preferences_load();
     g_assert_cmpuint(loaded->concurrency, ==, 3);
     g_assert_cmpstr(loaded->theme, ==, "dark");
+    g_assert_cmpuint(loaded->retries, ==, 2);
+    g_assert_true(loaded->number_playlist);
+    loaded->retries = 0;
+    g_assert_true(md_preferences_save(loaded, &e));
+    md_preferences_free(loaded);
+    loaded = md_preferences_load();
+    g_assert_cmpuint(loaded->retries, ==, 1);
+    loaded->retries = 11;
+    g_assert_true(md_preferences_save(loaded, &e));
+    md_preferences_free(loaded);
+    loaded = md_preferences_load();
+    g_assert_cmpuint(loaded->retries, ==, 10);
     md_preferences_free(p);
     md_preferences_free(loaded);
 }
@@ -461,13 +649,18 @@ int main(int argc, char **argv) {
     g_test_add_func("/formats/fallback-and-silent", format_fallback);
     g_test_add_func("/metadata/playlist", playlist);
     g_test_add_func("/errors/messages", errors);
+    g_test_add_func("/download/transient-retries", transient_retries);
+    g_test_add_func("/download/final-formats", final_formats);
     g_test_add_func("/download/progress", progress);
+    g_test_add_func("/download/weighted", weighted_progress);
     g_test_add_func("/download/monotonic", monotonic_progress);
     g_test_add_func("/download/fragment-estimate", fragment_progress);
     g_test_add_func("/updates/version-order", versions);
     g_test_add_func("/updates/releases", releases);
     g_test_add_func("/updates/checksums", checksums);
     g_test_add_func("/updates/atomic-install-rollback", atomic_update);
+    g_test_add_func("/manager/output-numbering", output_numbering);
+    g_test_add_func("/manager/cancel-all", cancel_all);
     g_test_add_func("/manager/queue", queue);
     g_test_add_func("/manager/display-order", display_order);
     g_test_add_func("/process/success", process_success);

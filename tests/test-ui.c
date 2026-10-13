@@ -22,6 +22,16 @@ static GtkWidget *find_widget(GtkWidget *root, GType type, const gchar *text) {
     }
     return NULL;
 }
+static GtkWindow *find_dialog(const gchar *text) {
+    GListModel *windows = gtk_window_get_toplevels();
+    for (guint i = 0; i < g_list_model_get_n_items(windows); i++) {
+        GtkWindow *candidate = g_list_model_get_item(windows, i);
+        if (GTK_IS_MESSAGE_DIALOG(candidate) && find_widget(GTK_WIDGET(candidate), GTK_TYPE_LABEL, text))
+            return candidate;
+        g_object_unref(candidate);
+    }
+    return NULL;
+}
 static GtkWidget *download_list(GtkWidget *root) {
     if (g_strcmp0(gtk_widget_get_name(root), "download-list") == 0)
         return root;
@@ -89,6 +99,18 @@ static gboolean drive(gpointer data) {
         gtk_icon_theme_get_for_display(gtk_widget_get_display(GTK_WIDGET(window))),
         "io.github.fernandorojas.MediaDownloader"));
     GtkWidget *root = GTK_WIDGET(window);
+    if (theme_checks == 0) {
+        GtkWidget *retry_label = find_widget(root, GTK_TYPE_LABEL, "Reintentos automáticos");
+        g_assert_nonnull(retry_label);
+        GtkWidget *retry_selector = gtk_widget_get_next_sibling(retry_label);
+        g_assert_true(GTK_IS_DROP_DOWN(retry_selector));
+        for (guint count = 1; count <= 10; count++) {
+            gtk_drop_down_set_selected(GTK_DROP_DOWN(retry_selector), count - 1);
+            MdPreferences *saved = md_preferences_load();
+            g_assert_cmpuint(saved->retries, ==, count);
+            md_preferences_free(saved);
+        }
+    }
     if (theme_checks < 3) {
         GtkWidget *toggle = theme_button(root);
         g_assert_nonnull(toggle);
@@ -157,6 +179,33 @@ static gboolean drive(gpointer data) {
         if (!gtk_picture_get_paintable(GTK_PICTURE(picture)))
             return G_SOURCE_CONTINUE;
         GtkWidget *download = find_widget(root, GTK_TYPE_BUTTON, "Descargar");
+        if (g_getenv("MD_UI_CANCEL_CONTROLS")) {
+            GtkWidget *cancel_all = find_widget(root, GTK_TYPE_BUTTON, "Cancelar todas");
+            g_assert_nonnull(cancel_all);
+            g_assert_false(gtk_widget_get_visible(cancel_all));
+            g_signal_emit_by_name(download, "clicked");
+            g_assert_false(gtk_widget_get_visible(cancel_all));
+            gtk_window_close(window);
+            g_autoptr(GtkWindow) close = find_dialog("Cerrar el programa antes");
+            g_assert_nonnull(close);
+            g_signal_emit_by_name(close, "response", GTK_RESPONSE_CANCEL);
+            g_assert_true(gtk_widget_get_visible(root));
+            g_signal_emit_by_name(download, "clicked");
+            g_signal_emit_by_name(download, "clicked");
+            g_assert_true(gtk_widget_get_visible(cancel_all));
+            g_signal_emit_by_name(cancel_all, "clicked");
+            g_autoptr(GtkWindow) reject = find_dialog("Cancelar todas las descargas pendientes");
+            g_assert_nonnull(reject);
+            g_signal_emit_by_name(reject, "response", GTK_RESPONSE_CANCEL);
+            g_assert_null(find_widget(root, GTK_TYPE_LABEL, "Cancelado"));
+            g_assert_true(gtk_widget_get_visible(cancel_all));
+            g_signal_emit_by_name(cancel_all, "clicked");
+            g_autoptr(GtkWindow) accept = find_dialog("Cancelar todas las descargas pendientes");
+            g_assert_nonnull(accept);
+            g_signal_emit_by_name(accept, "response", GTK_RESPONSE_ACCEPT);
+            step = 30;
+            return G_SOURCE_CONTINUE;
+        }
         g_signal_emit_by_name(download, "clicked");
         GtkWidget *list = download_list(root);
         GtkWidget *first = gtk_widget_get_first_child(list);
@@ -171,6 +220,27 @@ static gboolean drive(gpointer data) {
         g_assert_false(gtk_widget_get_sensitive(clear));
         g_assert_nonnull(find_widget(root, GTK_TYPE_LABEL, "1 elementos"));
         step++;
+    } else if (step == 30) {
+        GtkWidget *list = download_list(root);
+        guint cancelled = 0;
+        for (GtkWidget *row = gtk_widget_get_first_child(list); row;
+             row = gtk_widget_get_next_sibling(row))
+            if (find_widget(row, GTK_TYPE_LABEL, "Cancelado"))
+                cancelled++;
+        if (cancelled != 3)
+            return G_SOURCE_CONTINUE;
+        GtkWidget *cancel_all = find_widget(root, GTK_TYPE_BUTTON, "Cancelar todas");
+        g_assert_false(gtk_widget_get_visible(cancel_all));
+        GtkWidget *download = find_widget(root, GTK_TYPE_BUTTON, "Descargar");
+        g_signal_emit_by_name(download, "clicked");
+        g_assert_nonnull(find_widget(gtk_widget_get_first_child(list), GTK_TYPE_LABEL, "Analizando"));
+        g_assert_false(gtk_widget_get_visible(cancel_all));
+        gtk_window_close(window);
+        g_autoptr(GtkWindow) close = find_dialog("Cerrar el programa antes");
+        g_assert_nonnull(close);
+        g_signal_emit_by_name(close, "response", GTK_RESPONSE_ACCEPT);
+        step = 3;
+        return G_SOURCE_REMOVE;
     } else if (step == 3) {
         if (!find_widget(root, GTK_TYPE_LABEL, "Completado"))
             return G_SOURCE_CONTINUE;

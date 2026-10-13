@@ -55,6 +55,8 @@ MdVideo *md_video_from_object(JsonObject *obj, GError **error) {
     v->author = g_strdup(md_json_string(obj, "uploader"));
     v->site = g_strdup(md_json_string(obj, "extractor_key"));
     v->thumbnail = g_strdup(md_json_string(obj, "thumbnail"));
+    gdouble index = md_json_number(obj, "playlist_index", 0);
+    v->playlist_index = index > 0 && index < G_MAXUINT ? (guint)index : 0;
     v->duration = md_json_number(obj, "duration", -1);
     v->formats = g_ptr_array_new_with_free_func(format_free);
     v->entries = g_ptr_array_new_with_free_func((GDestroyNotify)md_video_free);
@@ -79,6 +81,13 @@ MdVideo *md_video_from_object(JsonObject *obj, GError **error) {
             gdouble height = md_json_number(o, "height", 0);
             f->height = height > 0 && height < 20000 ? (gint)height : 0;
             f->bitrate = md_json_number(o, "tbr", 0);
+            f->size = md_json_number(o, "filesize", -1);
+            if (f->size <= 0) {
+                f->size = md_json_number(o, "filesize_approx", -1);
+                f->size_estimated = TRUE;
+                if (f->size <= 0 && v->duration > 0 && f->bitrate > 0)
+                    f->size = v->duration * f->bitrate * 1000 / 8;
+            }
             f->language = g_strdup(md_json_string(o, "language"));
             f->language_preference = md_json_number(o, "language_preference", -1);
             JsonNode *drm = json_object_get_member(o, "has_drm");
@@ -102,8 +111,11 @@ MdVideo *md_video_from_object(JsonObject *obj, GError **error) {
                     entry->url = g_strdup(direct);
                 }
             }
-            if (entry && md_url_valid(entry->url))
+            if (entry && md_url_valid(entry->url)) {
+                if (!entry->playlist_index)
+                    entry->playlist_index = i + 1;
                 g_ptr_array_add(v->entries, entry);
+            }
             else
                 md_video_free(entry);
         }

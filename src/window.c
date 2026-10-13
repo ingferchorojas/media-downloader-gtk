@@ -15,7 +15,8 @@ typedef struct {
     GtkWidget *window, *url, *analyze, *spinner, *message, *title, *meta, *picture, *placeholder,
         *format, *quality, *hint, *destination, *download, *playlist, *list, *counter,
         *engine_update_label, *app_update_label, *engine_update_button, *app_update_button,
-        *check_updates_button, *clear_downloads_button;
+        *check_updates_button, *clear_downloads_button, *retries, *number_playlist,
+        *cancel_all_button, *close_dialog, *cancel_all_dialog;
     MdPreferences *prefs;
     GtkCssProvider *theme_provider;
     MdManager *manager;
@@ -123,12 +124,22 @@ static void row_cancel(GtkButton *b, gpointer data) {
 }
 static void row_retry(GtkButton *b, gpointer data) {
     (void)b;
-    md_job_retry(((Row *)data)->job);
+    MdJob *j = ((Row *)data)->job;
+    Window *w = j->manager->data;
+    j->retries = w->prefs->retries;
+    md_job_retry(j);
 }
 static void row_open(GtkButton *b, gpointer data) {
     (void)b;
     MdJob *j = ((Row *)data)->job;
     open_folder_path(j->manager->data, j->directory);
+}
+static guint unfinished_downloads(Window *w) {
+    guint count = 0;
+    for (guint i = 0; i < w->manager->jobs->len; i++)
+        if (!md_state_terminal(((MdJob *)g_ptr_array_index(w->manager->jobs, i))->state))
+            count++;
+    return count;
 }
 static void refresh_download_list(Window *w) {
     g_autoptr(GPtrArray) order = md_manager_display_order(w->manager);
@@ -144,6 +155,8 @@ static void refresh_download_list(Window *w) {
         can_clear |= md_state_terminal(job->state);
     }
     gtk_widget_set_sensitive(w->clear_downloads_button, can_clear && !w->closing);
+    gtk_widget_set_visible(w->cancel_all_button, unfinished_downloads(w) > 1);
+    gtk_widget_set_sensitive(w->cancel_all_button, !w->closing);
     g_autofree gchar *counter =
         g_strdup_printf("%u elementos · %u activos", w->manager->jobs->len, w->manager->active);
     gtk_label_set_text(GTK_LABEL(w->counter), counter);
@@ -173,6 +186,35 @@ static void clear_downloads(GtkButton *button, gpointer data) {
             remove_job_row(w, job);
     }
     refresh_download_list(w);
+}
+static void cancel_all_response(GtkDialog *dialog, gint response, gpointer data) {
+    Window *w = data;
+    w->cancel_all_dialog = NULL;
+    gtk_window_destroy(GTK_WINDOW(dialog));
+    if (response == GTK_RESPONSE_ACCEPT && !w->closing) {
+        md_manager_cancel_all(w->manager);
+        message(w, "Se cancelaron las descargas pendientes.");
+    }
+}
+static void cancel_all_clicked(GtkButton *button, gpointer data) {
+    (void)button;
+    Window *w = data;
+    if (w->closing || unfinished_downloads(w) < 2)
+        return;
+    if (w->cancel_all_dialog) {
+        gtk_window_present(GTK_WINDOW(w->cancel_all_dialog));
+        return;
+    }
+    w->cancel_all_dialog = gtk_message_dialog_new(
+        GTK_WINDOW(w->window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "¿Cancelar todas las descargas pendientes?");
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(w->cancel_all_dialog),
+        "Se cancelarán las descargas en curso y las que están en espera. Puedes reintentarlas después.");
+    gtk_dialog_add_buttons(GTK_DIALOG(w->cancel_all_dialog), "Seguir descargando", GTK_RESPONSE_CANCEL,
+                           "Cancelar todas", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_dialog_set_default_response(GTK_DIALOG(w->cancel_all_dialog), GTK_RESPONSE_CANCEL);
+    g_signal_connect(w->cancel_all_dialog, "response", G_CALLBACK(cancel_all_response), w);
+    gtk_window_present(GTK_WINDOW(w->cancel_all_dialog));
 }
 static void job_changed(MdJob *j, gpointer data) {
     Window *w = data;
@@ -207,10 +249,14 @@ static void job_changed(MdJob *j, gpointer data) {
             open_folder_path(w, j->directory);
     }
 }
-static void add_job(Window *w, MdVideo *v) {
+static void add_job(Window *w, MdVideo *v, const gchar *container, gint height) {
     MdJob *j = md_manager_add(w->manager, v->url, v->title, w->prefs->directory,
-                              selected_container(w), selected_height(w));
+                              container, height);
     j->from_playlist = w->video && w->video->entries->len > 0;
+    j->retries = w->prefs->retries;
+    if (j->from_playlist && w->number_playlist &&
+        gtk_check_button_get_active(GTK_CHECK_BUTTON(w->number_playlist)))
+        j->playlist_number = v->playlist_index;
     Row *r = g_new0(Row, 1);
     r->job = j;
     j->ui = r;
@@ -254,12 +300,14 @@ static void enqueue_selected(Window *w) {
         message(w, error->message);
         return;
     }
+    const gchar *container = selected_container(w);
+    gint height = selected_height(w);
     if (!w->video->entries->len)
-        add_job(w, w->video);
+        add_job(w, w->video, container, height);
     else
         for (guint i = 0; i < w->checks->len; i++)
             if (gtk_check_button_get_active(GTK_CHECK_BUTTON(g_ptr_array_index(w->checks, i))))
-                add_job(w, g_ptr_array_index(w->video->entries, i));
+                add_job(w, g_ptr_array_index(w->video->entries, i), container, height);
     md_manager_schedule(w->manager);
     message(w, "Descargas añadidas a la cola.");
 }
@@ -296,6 +344,42 @@ static void download_clicked(GtkButton *b, gpointer data) {
                            GTK_RESPONSE_ACCEPT, NULL);
     g_signal_connect(d, "response", G_CALLBACK(confirm_playlist), w);
     gtk_window_present(GTK_WINDOW(d));
+}
+static void dropdown_item_setup(GtkSignalListItemFactory *factory, GtkListItem *item, gpointer data) {
+    (void)factory;
+    (void)data;
+    gtk_list_item_set_child(item, gtk_label_new(NULL));
+}
+static void dropdown_item_bind(GtkSignalListItemFactory *factory, GtkListItem *item, gpointer data) {
+    (void)factory;
+    (void)data;
+    GtkStringObject *value = GTK_STRING_OBJECT(gtk_list_item_get_item(item));
+    gtk_label_set_text(GTK_LABEL(gtk_list_item_get_child(item)), gtk_string_object_get_string(value));
+}
+static GtkWidget *dropdown_new(const gchar *const *values) {
+    GtkWidget *dropdown = gtk_drop_down_new_from_strings(values);
+    GtkListItemFactory *factory = gtk_signal_list_item_factory_new();
+    g_signal_connect(factory, "setup", G_CALLBACK(dropdown_item_setup), NULL);
+    g_signal_connect(factory, "bind", G_CALLBACK(dropdown_item_bind), NULL);
+    gtk_drop_down_set_factory(GTK_DROP_DOWN(dropdown), factory);
+    gtk_drop_down_set_list_factory(GTK_DROP_DOWN(dropdown), factory);
+    g_object_unref(factory);
+    return dropdown;
+}
+static void retries_changed(GObject *object, GParamSpec *spec, gpointer data) {
+    (void)spec;
+    Window *w = data;
+    w->prefs->retries = gtk_drop_down_get_selected(GTK_DROP_DOWN(object)) + 1;
+    g_autoptr(GError) error = NULL;
+    if (!md_preferences_save(w->prefs, &error))
+        message(w, error->message);
+}
+static void numbering_changed(GtkCheckButton *button, gpointer data) {
+    Window *w = data;
+    w->prefs->number_playlist = gtk_check_button_get_active(button);
+    g_autoptr(GError) error = NULL;
+    if (!md_preferences_save(w->prefs, &error))
+        message(w, error->message);
 }
 static void select_all(GtkCheckButton *b, gpointer data) {
     Window *w = data;
@@ -435,6 +519,12 @@ static void analysis_done(MdVideo *video, const gchar *error, gpointer data) {
     gtk_drop_down_set_selected(GTK_DROP_DOWN(w->quality), preferred);
     gtk_widget_set_visible(w->playlist, video->entries->len > 0);
     if (video->entries->len) {
+        w->number_playlist = gtk_check_button_new_with_label("Numerar videos automáticamente");
+        gtk_check_button_set_active(GTK_CHECK_BUTTON(w->number_playlist), w->prefs->number_playlist);
+        gtk_widget_set_tooltip_text(w->number_playlist,
+                                   "Añade 001, 002, 003… al nombre usando el orden original de la lista.");
+        g_signal_connect(w->number_playlist, "toggled", G_CALLBACK(numbering_changed), w);
+        gtk_box_append(GTK_BOX(w->playlist), w->number_playlist);
         GtkWidget *all = gtk_check_button_new_with_label("Seleccionar todos");
         gtk_box_append(GTK_BOX(w->playlist), all);
         g_signal_connect(all, "toggled", G_CALLBACK(select_all), w);
@@ -464,6 +554,7 @@ static void clear_video(Window *w) {
     GtkWidget *child;
     while ((child = gtk_widget_get_first_child(w->playlist)))
         gtk_box_remove(GTK_BOX(w->playlist), child);
+    w->number_playlist = NULL;
     g_ptr_array_set_size(w->checks, 0);
     gtk_widget_set_visible(w->playlist, FALSE);
 }
@@ -639,12 +730,12 @@ static void preferences_clicked(GtkButton *b, gpointer data) {
                 *qualities[] =
                     {"Mejor disponible", "360p", "480p", "720p", "1080p", "1440p", "2160p", NULL},
                 *themes[] = {"Sistema", "Claro", "Oscuro", NULL};
-    p->video = pref_line(content, "Video preferido", gtk_drop_down_new_from_strings(videos));
+    p->video = pref_line(content, "Video preferido", dropdown_new(videos));
     gtk_drop_down_set_selected(GTK_DROP_DOWN(p->video), MIN(container_index(w->prefs->video), 2u));
-    p->audio = pref_line(content, "Audio preferido", gtk_drop_down_new_from_strings(audios));
+    p->audio = pref_line(content, "Audio preferido", dropdown_new(audios));
     guint audio_index = container_index(w->prefs->audio);
     gtk_drop_down_set_selected(GTK_DROP_DOWN(p->audio), audio_index >= 3 ? audio_index - 3 : 0);
-    p->quality = pref_line(content, "Calidad preferida", gtk_drop_down_new_from_strings(qualities));
+    p->quality = pref_line(content, "Calidad preferida", dropdown_new(qualities));
     const gint heights[] = {0, 360, 480, 720, 1080, 1440, 2160};
     for (guint i = 0; i < 7; i++)
         if (heights[i] == w->prefs->quality)
@@ -652,7 +743,7 @@ static void preferences_clicked(GtkButton *b, gpointer data) {
     p->concurrency =
         pref_line(content, "Descargas simultáneas", gtk_spin_button_new_with_range(1, 8, 1));
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(p->concurrency), w->prefs->concurrency);
-    p->theme = pref_line(content, "Apariencia", gtk_drop_down_new_from_strings(themes));
+    p->theme = pref_line(content, "Apariencia", dropdown_new(themes));
     gtk_drop_down_set_selected(GTK_DROP_DOWN(p->theme), g_str_equal(w->prefs->theme, "dark") ? 2
                                                         : g_str_equal(w->prefs->theme, "light")
                                                             ? 1
@@ -728,19 +819,52 @@ static gboolean await_close(gpointer data) {
     g_free(w);
     return G_SOURCE_REMOVE;
 }
+static void begin_close(Window *w) {
+    if (w->closing)
+        return;
+    w->closing = TRUE;
+    if (w->cancel_all_dialog) {
+        gtk_window_destroy(GTK_WINDOW(w->cancel_all_dialog));
+        w->cancel_all_dialog = NULL;
+    }
+    if (w->chooser)
+        g_signal_emit_by_name(w->chooser, "response", GTK_RESPONSE_CANCEL);
+    gtk_widget_set_visible(w->window, FALSE);
+    g_cancellable_cancel(w->analysis_cancel);
+    g_cancellable_cancel(w->thumbnail_cancel);
+    g_cancellable_cancel(w->updates_cancel);
+    md_manager_stop(w->manager);
+    g_timeout_add(50, await_close, w);
+}
+static void close_response(GtkDialog *dialog, gint response, gpointer data) {
+    Window *w = data;
+    w->close_dialog = NULL;
+    gtk_window_destroy(GTK_WINDOW(dialog));
+    if (response == GTK_RESPONSE_ACCEPT)
+        begin_close(w);
+}
 static gboolean close_requested(GtkWindow *window, gpointer data) {
     Window *w = data;
-    if (!w->closing) {
-        w->closing = TRUE;
-        if (w->chooser)
-            g_signal_emit_by_name(w->chooser, "response", GTK_RESPONSE_CANCEL);
-        gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
-        g_cancellable_cancel(w->analysis_cancel);
-        g_cancellable_cancel(w->thumbnail_cancel);
-        g_cancellable_cancel(w->updates_cancel);
-        md_manager_stop(w->manager);
-        g_timeout_add(50, await_close, w);
+    if (w->closing)
+        return TRUE;
+    if (w->close_dialog) {
+        gtk_window_present(GTK_WINDOW(w->close_dialog));
+        return TRUE;
     }
+    if (!unfinished_downloads(w)) {
+        begin_close(w);
+        return TRUE;
+    }
+    w->close_dialog = gtk_message_dialog_new(
+        window, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
+        GTK_BUTTONS_NONE, "¿Cerrar el programa antes de finalizar las descargas?");
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(w->close_dialog),
+        "Hay descargas pendientes. Si cierras el programa, se cancelarán las descargas en curso y las que están en espera.");
+    gtk_dialog_add_buttons(GTK_DIALOG(w->close_dialog), "Seguir descargando", GTK_RESPONSE_CANCEL,
+                           "Cerrar programa", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_dialog_set_default_response(GTK_DIALOG(w->close_dialog), GTK_RESPONSE_CANCEL);
+    g_signal_connect(w->close_dialog, "response", G_CALLBACK(close_response), w);
+    gtk_window_present(GTK_WINDOW(w->close_dialog));
     return TRUE;
 }
 static void dependencies_done(GObject *source, GAsyncResult *result, gpointer data) {
@@ -1012,10 +1136,10 @@ void md_window_present(GtkApplication *application) {
     gtk_box_append(GTK_BOX(metadata), text);
     gtk_box_append(GTK_BOX(card), metadata);
     GtkWidget *selectors = box(GTK_ORIENTATION_HORIZONTAL, 14);
-    w->format = gtk_drop_down_new_from_strings(container_labels);
+    w->format = dropdown_new(container_labels);
     gtk_drop_down_set_selected(GTK_DROP_DOWN(w->format), container_index(w->prefs->video));
     const gchar *qualities[] = {"Mejor calidad disponible", NULL};
-    w->quality = gtk_drop_down_new_from_strings(qualities);
+    w->quality = dropdown_new(qualities);
     gtk_widget_set_hexpand(w->format, TRUE);
     gtk_widget_set_hexpand(w->quality, TRUE);
     gtk_box_append(GTK_BOX(selectors), w->format);
@@ -1025,6 +1149,16 @@ void md_window_present(GtkApplication *application) {
     g_signal_connect(preferred_audio, "clicked", G_CALLBACK(preferred_audio_clicked), w);
     gtk_box_append(GTK_BOX(selectors), preferred_audio);
     gtk_box_append(GTK_BOX(card), selectors);
+    GtkWidget *retry_options = box(GTK_ORIENTATION_HORIZONTAL, 12);
+    const gchar *retry_counts[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", NULL};
+    w->retries = dropdown_new(retry_counts);
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(w->retries), w->prefs->retries - 1);
+    gtk_widget_set_tooltip_text(w->retries,
+                               "Número de reintentos automáticos tras un fallo de descarga.");
+    g_signal_connect(w->retries, "notify::selected", G_CALLBACK(retries_changed), w);
+    gtk_box_append(GTK_BOX(retry_options), label("Reintentos automáticos", NULL));
+    gtk_box_append(GTK_BOX(retry_options), w->retries);
+    gtk_box_append(GTK_BOX(card), retry_options);
     w->hint = label("", "dim-label");
     gtk_box_append(GTK_BOX(card), w->hint);
     GtkWidget *destination = box(GTK_ORIENTATION_HORIZONTAL, 12);
@@ -1045,6 +1179,10 @@ void md_window_present(GtkApplication *application) {
     w->counter = label("0 elementos · 0 activos", "dim-label");
     gtk_box_append(GTK_BOX(listhead), listtitle);
     gtk_box_append(GTK_BOX(listhead), w->counter);
+    w->cancel_all_button = gtk_button_new_with_label("Cancelar todas");
+    gtk_widget_set_visible(w->cancel_all_button, FALSE);
+    g_signal_connect(w->cancel_all_button, "clicked", G_CALLBACK(cancel_all_clicked), w);
+    gtk_box_append(GTK_BOX(listhead), w->cancel_all_button);
     w->clear_downloads_button = gtk_button_new_with_label("Limpiar descargas");
     gtk_widget_set_tooltip_text(
         w->clear_downloads_button,

@@ -17,8 +17,10 @@ gboolean md_audio_conversion_supported(const gchar *container);
 typedef struct {
     gdouble downloaded, total, speed, eta;
     gboolean estimated;
-    gchar *status, *stage, *filename;
+    gchar *status, *stage, *filename, *format_id;
     gint fragment, fragments;
 } MdProgress;
 gboolean md_progress_parse(const gchar *line, MdProgress *progress);
 void md_progress_clear(MdProgress *progress);
+
+gboolean md_output_matches(const gchar *json, const gchar *container, GError **error);

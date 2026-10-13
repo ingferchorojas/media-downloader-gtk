@@ -155,3 +155,90 @@ that its row appears first. It clicks **Limpiar descargas** during analysis,
 checks that only the finished row is removed and the active row survives, then
 clears the final completed row and checks the empty list and disabled button.
 The harness confirms the saved media still exists after clearing the queue.
+
+## Combined download size — 2026-10-12
+
+Debug compilation and all 22 core tests pass. New regression checks cover unequal
+video/audio sizes, cumulative bytes across track transitions, initialization
+fragment estimates, unavailable audio sizes, and the 99% processing cap.
+The local HTTP integration suite passes for direct downloads, six output formats,
+DASH video/audio merging into MP4, MKV and WebM, queue concurrency, cancellation,
+HTTP errors and preservation of existing files. Integration callbacks additionally
+check that progress events match the selected tracks, display a combined total,
+and do not report downloaded bytes above a known total.
+
+The combined total now stays fixed until all tracks finish. The weighted-progress
+regression also checks changing fragment estimates, downloaded bytes exceeding
+an initial estimate, track completion with a different size, retention of `≈`
+during the download, and the final actual combined size. Optimized compilation
+and all 22 core tests pass for this change.
+
+## Retry selection and playlist numbering — 2026-10-12
+
+Optimized compilation and all 23 core tests pass. Coverage includes saved retry
+counts and bounds (1–3), saved numbering preference, original playlist positions
+including unavailable entries, filename prefixes and preservation on manual retry.
+The local HTTP integration suite and GTK UI suite under Xvfb pass. A numbered
+job produces a playable `007 - … .mp4` with one configured retry. The UI test
+selects each retry count and checks the saved preference. The updated Debian
+package was generated from the optimized build.
+
+## Strict output-format verification — 2026-10-12
+
+Release and ASan/UBSan core suites pass all 24 tests. A successful yt-dlp exit
+now triggers asynchronous FFprobe verification before a private staged output
+is published to the destination. Validation checks extension, container, audio
+codec and absence of video in audio exports; attached cover art is accepted.
+Each playlist batch captures one selected format before enqueueing its jobs.
+
+The local HTTP integration and GTK UI suites pass, including all six native/
+audio outputs, DASH merging, cancellation, queue concurrency and preservation
+of existing video output. Added format regressions also pass under ASan/UBSan:
+four numbered MP3 jobs with mixed MP4 and DASH sources, preservation of a valid
+existing MP3, rejection of an MP4 disguised as an existing MP3, and rejection of
+an engine that exits successfully but returns a video for an MP3 request.
+Incorrect outputs remain in the private staging folder and are never reported
+as completed or published as playlist results. Conversion overwrites are allowed
+only within the private staging folder; existing destination files stay protected.
+
+Five owner-reported MP4 files in the music directory were converted locally with
+FFmpeg and verified as MP3 audio. Their original videos were preserved in the
+hidden `.originales-convertidos` folder. The release Debian package was rebuilt.
+
+## Processing retries — 2026-10-12
+
+Failed processing and failed final-format validation now reuse the same staged
+job and argument snapshot for the selected 1–3 additional attempts. Cancellation
+and manager shutdown stop retries; manual retry resets the processing counter.
+`tests/processing-retries.py` passes in release and ASan/UBSan builds. Its controlled
+engine simulates conversion failures and invokes real FFmpeg on recovery. For
+each configured retry count, it checks recovery, exhaustion after exactly N+1
+total attempts, one source download, no visible video output, and cancellation
+before another processing attempt starts. The 24 core tests still pass, and the
+release Debian package was rebuilt.
+
+## Retry range and delay — 2026-10-12
+
+The retry selector accepts 1–10 and retains existing settings. Retries for
+processing and transient metadata/connection failures wait 3, 6, 12, 24, then
+at most 30 seconds. Temporary connection failures also refresh metadata before
+resuming the same staged job; known unavailable/private content does not enter
+connection retries. Cancelling removes a pending timer immediately.
+
+All 25 core tests pass. Release and ASan/UBSan retry regressions verify delayed
+processing recovery, exact exhaustion counts, reuse of downloaded source files,
+recovery after two HTTP 503 analysis failures, bounded analysis exhaustion,
+no retry for HTTP 404, and cancellation of both pending retry types. The Xvfb
+UI test selects and persists all ten retry values. The release package was rebuilt.
+
+## Close confirmation and cancel-all — 2026-10-12
+
+Release and ASan/UBSan core suites pass all 26 tests. Batch cancellation prevents
+queued work from starting during cancellation, preserves completed jobs and
+restores the ability to enqueue new downloads. The Xvfb UI regression with
+`MD_UI_CANCEL_CONTROLS=1` passes with fatal GLib warnings: no batch button for
+zero/one unfinished job, button present for multiple unfinished jobs, declining
+close/cancel dialogs preserves work, accepted batch cancellation cancels active
+and waiting jobs, and a new download can be queued afterward. Accepting close
+with that new job pending shuts down cleanly after callbacks finish. The release
+Debian package was rebuilt.

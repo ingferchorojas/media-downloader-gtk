@@ -15,12 +15,17 @@ typedef enum {
 typedef struct _MdManager MdManager;
 typedef struct {
     MdManager *manager;
-    gchar *url, *title, *directory, *container, *error, *detail;
+    gchar *url, *title, *directory, *container, *error, *detail, *work_directory, *output_path;
     gint height;
     MdState state;
     gdouble fraction;
     GHashTable *track_progress;
-    guint expected_tracks;
+    guint expected_tracks, retries, playlist_number, processing_retries, transfer_retries, retry_timer;
+    gboolean retry_analysis;
+    gchar **download_argv;
+    gboolean processing_started;
+    gdouble downloaded_bytes, total_bytes;
+    gboolean total_estimated;
     gboolean from_playlist;
     MdProcess *process;
     GCancellable *cancel;
@@ -40,11 +45,16 @@ void md_manager_schedule(MdManager *manager);
 void md_job_cancel(MdJob *job);
 void md_job_retry(MdJob *job);
 gboolean md_manager_remove(MdManager *manager, MdJob *job);
+void md_manager_cancel_all(MdManager *manager);
 void md_manager_stop(MdManager *manager);
 void md_manager_free(MdManager *manager);
 const gchar *md_state_name(MdState state);
 gboolean md_state_terminal(MdState state);
 
+gboolean md_retryable_error(const gchar *error);
+guint md_retry_delay(guint attempt);
+gchar *md_job_output_template(const MdJob *job);
+void md_job_prepare_tracks(MdJob *job, const MdSelection *selection);
 void md_job_apply_progress(MdJob *job, const MdProgress *progress);
 
 /* Borrowed jobs in display order; does not change scheduling order. */

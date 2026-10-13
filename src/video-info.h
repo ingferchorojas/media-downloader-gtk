@@ -3,12 +3,14 @@
 typedef struct {
     gchar *id, *ext, *vcodec, *acodec, *language;
     gint height;
-    gdouble bitrate, language_preference;
+    gdouble bitrate, language_preference, size;
+    gboolean size_estimated;
     gboolean drm;
 } MdFormat;
 typedef struct _MdVideo {
     gchar *url, *title, *author, *site, *thumbnail;
     gdouble duration;
+    guint playlist_index;
     GPtrArray *formats, *entries;
 } MdVideo;
 MdVideo *md_video_parse(const gchar *data, GError **error);

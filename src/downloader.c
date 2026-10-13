@@ -242,8 +242,13 @@ gboolean md_progress_parse(const gchar *line, MdProgress *p) {
     JsonNode *root = json_parser_get_root(parser);
     if (!JSON_NODE_HOLDS_OBJECT(root))
         return FALSE;
-    JsonObject *o = json_node_get_object(root);
+    JsonObject *envelope = json_node_get_object(root);
+    JsonObject *o = envelope;
+    JsonNode *payload = json_object_get_member(envelope, "progress");
+    if (payload && JSON_NODE_HOLDS_OBJECT(payload))
+        o = json_node_get_object(payload);
     memset(p, 0, sizeof *p);
+    p->format_id = g_strdup(md_json_string(envelope, "format_id"));
     p->downloaded = md_json_number(o, "downloaded_bytes", -1);
     p->total = md_json_number(o, "total_bytes", -1);
     if (p->total <= 0) {
@@ -255,6 +260,9 @@ gboolean md_progress_parse(const gchar *line, MdProgress *p) {
     p->status = g_strdup(md_json_string(o, "status"));
     p->filename = g_strdup(md_json_string(o, "filename"));
     p->stage = g_strdup(md_json_string(o, "postprocessor"));
+    JsonNode *info = json_object_get_member(o, "info_dict");
+    if (!p->format_id && info && JSON_NODE_HOLDS_OBJECT(info))
+        p->format_id = g_strdup(md_json_string(json_node_get_object(info), "format_id"));
     gdouble fragment = md_json_number(o, "fragment_index", 0),
             fragments = md_json_number(o, "fragment_count", 0);
     p->fragment = fragment > 0 && fragment < G_MAXINT ? (gint)fragment : 0;
@@ -264,5 +272,67 @@ gboolean md_progress_parse(const gchar *line, MdProgress *p) {
 void md_progress_clear(MdProgress *p) {
     g_free(p->status);
     g_free(p->stage);
+    g_free(p->format_id);
     g_free(p->filename);
+}
+
+gboolean md_output_matches(const gchar *json, const gchar *container, GError **error) {
+    g_auto(GStrv) names = NULL;
+    g_autoptr(JsonParser) parser = json_parser_new();
+    if (!json_parser_load_from_data(parser, json, -1, error))
+        return FALSE;
+    JsonNode *root = json_parser_get_root(parser);
+    if (!JSON_NODE_HOLDS_OBJECT(root))
+        goto invalid;
+    JsonObject *o = json_node_get_object(root);
+    JsonNode *format = json_object_get_member(o, "format"),
+             *streams = json_object_get_member(o, "streams");
+    if (!format || !JSON_NODE_HOLDS_OBJECT(format) || !streams || !JSON_NODE_HOLDS_ARRAY(streams))
+        goto invalid;
+    const gchar *name = md_json_string(json_node_get_object(format), "format_name");
+    if (!name)
+        goto invalid;
+    names = g_strsplit(name, ",", -1);
+    const gchar *expected = g_str_equal(container, "m4a") || g_str_equal(container, "mp4") ? "mp4"
+                            : g_str_equal(container, "opus") ? "ogg"
+                            : g_str_equal(container, "mkv") ? "matroska" : container;
+    if (!g_strv_contains((const gchar *const *)names, expected))
+        goto invalid;
+    gboolean audio_only = g_str_equal(container, "mp3") || g_str_equal(container, "m4a") ||
+                          g_str_equal(container, "opus") || g_str_equal(container, "flac") ||
+                          g_str_equal(container, "wav");
+    const gchar *codec = g_str_equal(container, "m4a") ? "aac"
+                        : g_str_equal(container, "wav") ? "pcm_s16le" : container;
+    JsonArray *a = json_node_get_array(streams);
+    guint audio = 0, video = 0;
+    for (guint i = 0; i < json_array_get_length(a); i++) {
+        JsonNode *item = json_array_get_element(a, i);
+        if (!JSON_NODE_HOLDS_OBJECT(item))
+            goto invalid;
+        JsonObject *stream = json_node_get_object(item);
+        const gchar *type = md_json_string(stream, "codec_type");
+        if (g_strcmp0(type, "video") == 0) {
+            JsonNode *disposition = json_object_get_member(stream, "disposition");
+            gboolean cover = disposition && JSON_NODE_HOLDS_OBJECT(disposition) &&
+                md_json_number(json_node_get_object(disposition), "attached_pic", 0) == 1;
+            if (!cover)
+                video++;
+        }
+        if (g_strcmp0(type, "audio") == 0) {
+            audio++;
+            const gchar *actual_codec = md_json_string(stream, "codec_name");
+            gboolean matches = g_strcmp0(actual_codec, codec) == 0 ||
+                (g_str_equal(container, "m4a") && g_strcmp0(actual_codec, "alac") == 0) ||
+                (g_str_equal(container, "wav") && actual_codec && g_str_has_prefix(actual_codec, "pcm_"));
+            if (audio_only && !matches)
+                goto invalid;
+        }
+    }
+    if (audio_only ? audio > 0 && video == 0 : video > 0)
+        return TRUE;
+invalid:
+    g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                "El archivo final no corresponde al formato %s elegido. No se marcó como completado.",
+                container);
+    return FALSE;
 }

@@ -47,6 +47,8 @@ void md_selection_free(MdSelection *s) {
         g_free(s->selector);
         g_free(s->container);
         g_free(s->audio_language);
+        for (guint i = 0; i < s->tracks; i++)
+            g_free(s->track_ids[i]);
         g_free(s);
     }
 }
@@ -119,6 +121,13 @@ MdSelection *md_select_format(MdVideo *v, const gchar *container, gint height, G
     } else {
         s->selector = g_strdup_printf("%s+%s", video->id, sound->id);
         s->processing = MD_MERGE;
+    }
+    MdFormat *selected[] = {audio ? sound : video, sound};
+    s->tracks = !audio && !codec(video->acodec) && has_audio ? 2 : 1;
+    for (guint i = 0; i < s->tracks; i++) {
+        s->track_ids[i] = g_strdup(selected[i]->id);
+        s->track_sizes[i] = selected[i]->size;
+        s->track_estimated[i] = selected[i]->size_estimated;
     }
     MdFormat *audio_format = audio || !codec(video->acodec) ? sound : video;
     s->audio_language = audio_format ? g_strdup(audio_format->language) : NULL;

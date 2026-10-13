@@ -25,6 +25,10 @@ MdPreferences *md_preferences_load(void) {
         (guint)CLAMP(g_key_file_get_integer(k, "Preferences", "concurrency", NULL), 1, 8);
     if (!g_key_file_has_key(k, "Preferences", "concurrency", NULL))
         p->concurrency = 2;
+    p->retries = g_key_file_has_key(k, "Preferences", "retries", NULL)
+                     ? (guint)CLAMP(g_key_file_get_integer(k, "Preferences", "retries", NULL), 1, 10)
+                     : 3;
+    p->number_playlist = g_key_file_get_boolean(k, "Preferences", "number_playlist", NULL);
     p->notify = !g_key_file_has_key(k, "Preferences", "notify", NULL) ||
                 g_key_file_get_boolean(k, "Preferences", "notify", NULL);
     p->open_folder = g_key_file_get_boolean(k, "Preferences", "open_folder", NULL);
@@ -45,6 +49,8 @@ gboolean md_preferences_save(MdPreferences *p, GError **error) {
     g_key_file_set_string(k, "Preferences", "theme", p->theme);
     g_key_file_set_integer(k, "Preferences", "quality", p->quality);
     g_key_file_set_integer(k, "Preferences", "concurrency", (gint)p->concurrency);
+    g_key_file_set_integer(k, "Preferences", "retries", (gint)CLAMP(p->retries, 1u, 10u));
+    g_key_file_set_boolean(k, "Preferences", "number_playlist", p->number_playlist);
     g_key_file_set_boolean(k, "Preferences", "notify", p->notify);
     g_key_file_set_boolean(k, "Preferences", "open_folder", p->open_folder);
     gsize len;

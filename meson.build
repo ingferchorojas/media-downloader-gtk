@@ -1,4 +1,4 @@
-project('media-downloader-gtk', 'c', version: '1.0.0', meson_version: '>=0.61', default_options: ['c_std=c11', 'warning_level=3', 'werror=true'])
+project('media-downloader-gtk', 'c', version: '1.1.0', meson_version: '>=0.61', default_options: ['c_std=c11', 'warning_level=3', 'werror=true'])
 add_project_arguments('-D_POSIX_C_SOURCE=200809L', '-DGDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_6', '-DGDK_VERSION_MAX_ALLOWED=GDK_VERSION_4_6', language: 'c')
 gtk = dependency('gtk4', version: '>=4.6', include_type: 'system')
 gio = dependency('gio-2.0', version: '>=2.70')

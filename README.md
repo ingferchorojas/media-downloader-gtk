@@ -1,5 +1,13 @@
 # Media Downloader GTK
 
+[![Descargar v1.1.0 para Ubuntu 24.04 amd64](https://img.shields.io/badge/Descargar-v1.1.0%20%C2%B7%20Ubuntu%2024.04%20amd64-2563eb?style=for-the-badge)](https://github.com/ingferchorojas/media-downloader-gtk/releases/download/v1.1.0/media-downloader-gtk_1.1.0-1_amd64.deb)
+
+**[Guía de instalación en español](docs/INSTALL.es.md)** · [Notas de la versión](docs/RELEASE_NOTES.md) · [Todas las versiones](https://github.com/ingferchorojas/media-downloader-gtk/releases)
+
+Descarga videos o convierte listas a MP3 desde una interfaz en español. El instalador
+publicado está preparado para **Ubuntu 24.04, amd64 (Intel/AMD de 64 bits)**.
+Otros sistemas requieren una compilación y pruebas propias.
+
 A native Linux desktop interface for [yt-dlp](https://github.com/yt-dlp/yt-dlp),
 written in C11 with GTK4, GLib and GIO. Analyze and download authorized video
 and audio without accounts, a backend, advertising or telemetry. The application
@@ -26,7 +34,7 @@ interface is in Spanish; contributor documentation is in English.
 - Natural filenames preserving spaces and Unicode characters.
 - MIT-licensed original code and icon. yt-dlp and FFmpeg remain external dependencies.
 
-![Completed MP3 download from the owner-provided YouTube URL](docs/images/main-window.png)
+![Interfaz de Media Downloader GTK 1.1.0](docs/images/main-window.png)
 
 ## Requirements
 
@@ -49,7 +57,7 @@ process and converted to PNG by FFmpeg; this keeps media extraction under the sa
 After building or downloading the appropriate package for your distribution:
 
 ```sh
-sudo apt install ./dist/media-downloader-gtk_1.0.0-1_amd64.deb
+sudo apt install ./dist/media-downloader-gtk_1.1.0-1_amd64.deb
 media-downloader-gtk
 sudo apt remove media-downloader-gtk
 ```
@@ -229,7 +237,7 @@ To validate installation and removal without changing the host:
 ```sh
 docker run --rm --init -v "$PWD/dist:/packages:ro" \
   -v "$PWD/scripts/verify-package.sh:/verify-package.sh:ro" ubuntu:24.04 \
-  sh /verify-package.sh /packages/media-downloader-gtk_1.0.0-1_amd64.deb
+  sh /verify-package.sh /packages/media-downloader-gtk_1.1.0-1_amd64.deb
 ```
 
 This checks APT dependency resolution, desktop-file validation, dynamic linking,
@@ -255,7 +263,7 @@ worker. All owned processes are drained and reaped before their data is released
 
 GitHub CI builds, tests, packages and verifies installation on Ubuntu 24.04.
 The manually triggered release workflow creates an **unpublished draft** from
-an existing authorized `v1.0.0` tag. Publishing requires a separate owner action.
+an existing authorized stable version tag. Publishing requires a separate owner action.
 See [release preparation](docs/RELEASE_NOTES.md) and [validation](docs/VALIDATION.md).
 
 ## License, acknowledgements and lawful use
@@ -271,5 +279,4 @@ lawful. This project does not bypass DRM, extract browser cookies, evade
 authentication or provide access-restriction bypass mechanisms.
 
 Source repository: [ingferchorojas/media-downloader-gtk](https://github.com/ingferchorojas/media-downloader-gtk).
-Published release: [v1.0.0](https://github.com/ingferchorojas/media-downloader-gtk/releases/tag/v1.0.0).
-Later fixes in `main` are available in locally built packages until a new release is published.
+Release: [v1.1.0](https://github.com/ingferchorojas/media-downloader-gtk/releases/tag/v1.1.0).

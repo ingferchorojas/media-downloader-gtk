@@ -25,9 +25,15 @@ jobs:
           meson test -C build-asan --print-errorlogs
       - name: Real media integration and GUI tests
         run: dbus-run-session -- xvfb-run -a env MD_TEST_UI=1 GTK_THEME=Adwaita:dark G_DEBUG=fatal-warnings GDK_BACKEND=x11 GSK_RENDERER=cairo python3 tests/run-integration.py
+      - name: Processing and connection retry regressions
+        run: python3 tests/processing-retries.py build/test-integration
+      - name: Close and batch-cancel dialog regressions
+        run: dbus-run-session -- xvfb-run -a env MD_TEST_UI=1 MD_ONLY_UI=1 MD_UI_CANCEL_CONTROLS=1 GTK_THEME=Adwaita:dark G_DEBUG=fatal-warnings GDK_BACKEND=x11 GSK_RENDERER=cairo python3 tests/run-integration.py
       - run: scripts/build-deb.sh build
       - name: Verify APT install, non-root launch and removal
-        run: docker run --rm --init -v "$PWD/dist:/packages:ro" -v "$PWD/scripts/verify-package.sh:/verify-package.sh:ro" ubuntu:24.04 sh /verify-package.sh /packages/media-downloader-gtk_1.0.0-1_amd64.deb
+        run: |
+          package="media-downloader-gtk_$(dpkg-parsechangelog -l packaging/debian/changelog -S Version)_$(dpkg --print-architecture).deb"
+          docker run --rm --init -v "$PWD/dist:/packages:ro" -v "$PWD/scripts/verify-package.sh:/verify-package.sh:ro" ubuntu:24.04 sh /verify-package.sh "/packages/$package"
       - uses: actions/upload-artifact@v4
         with:
           name: media-downloader-gtk-deb

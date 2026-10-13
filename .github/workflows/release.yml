@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing authorized version tag (v1.0.0)'
+        description: 'Existing authorized stable version tag (for example v1.1.0)'
         required: true
-        default: v1.0.0
+        default: v1.1.0
 permissions:
   contents: read
 jobs:
@@ -17,7 +17,7 @@ jobs:
       - name: Validate tag
         env:
           RELEASE_TAG: ${{ inputs.tag }}
-        run: test "$RELEASE_TAG" = v1.0.0
+        run: '[[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag }}
@@ -28,9 +28,12 @@ jobs:
       - run: meson setup build --prefix=/usr --buildtype=release
       - run: meson compile -C build && meson test -C build --print-errorlogs
       - run: python3 tests/run-integration.py
+      - run: python3 tests/processing-retries.py build/test-integration
       - run: scripts/build-deb.sh build
+      - name: Generate package checksums
+        run: cd dist && sha256sum *.deb > SHA256SUMS
       - name: Create an unpublished release draft
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-        run: gh release create "$RELEASE_TAG" dist/*.deb --verify-tag --draft --title "Media Downloader $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
+        run: gh release create "$RELEASE_TAG" dist/*.deb dist/SHA256SUMS --verify-tag --draft --title "Media Downloader $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md

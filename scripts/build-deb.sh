@@ -3,6 +3,7 @@ set -eu
 build=${1:-build}
 case "$build" in /*) ;; *) build="$PWD/$build" ;; esac
 project=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+version=$(dpkg-parsechangelog -l "$project/packaging/debian/changelog" -S Version)
 dist="$project/dist"
 mkdir -p "$dist"
 stage=$(mktemp -d "$dist/stage.XXXXXX")
@@ -20,7 +21,7 @@ deps=$(cd "$stage" && dpkg-shlibdeps -O -eusr/bin/media-downloader-gtk | sed -n 
 rm -rf "$stage/debian"
 cat > "$stage/DEBIAN/control" <<CONTROL
 Package: media-downloader-gtk
-Version: 1.0.0-1
+Version: $version
 Section: video
 Priority: optional
 Architecture: $arch
@@ -35,7 +36,7 @@ cp "$project/packaging/debian/copyright" "$stage/usr/share/doc/media-downloader-
 find "$stage" -type d -exec chmod 755 {} +
 find "$stage" -type f -exec chmod 644 {} +
 chmod 755 "$stage/usr/bin/media-downloader-gtk"
-package="$dist/media-downloader-gtk_1.0.0-1_${arch}.deb"
+package="$dist/media-downloader-gtk_${version}_${arch}.deb"
 dpkg-deb --root-owner-group --build "$stage" "$package"
 dpkg-deb --info "$package"
 printf '\nPackage: %s\n' "$package"

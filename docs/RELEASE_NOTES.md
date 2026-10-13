@@ -1,22 +1,45 @@
-# Media Downloader v1.0.0
+# Media Downloader GTK v1.1.0
 
-Native C11 / GTK4 media downloader with a Spanish interface, powered by external
-yt-dlp and FFmpeg installations. Includes JSON metadata analysis, compatible
-video format selection, audio conversion, structured live progress, a concurrent
-queue, cancellation, retries, playlist selection and local preferences.
-Checks GitHub for newer engine/application releases at startup, offers a verified
-per-user engine update, and preserves spaces in downloaded filenames.
-Includes an original YT icon with matching desktop application identity. Overall
-progress never decreases within an attempt; 100% is reserved for successful completion.
+Nueva versión de la aplicación de escritorio en español para descargar videos
+y audio con yt-dlp y FFmpeg.
 
-Release artifacts: architecture-specific Debian package and source code.
+## Descargar e instalar
 
-Published on 2026-10-11 with explicit owner authorization. The Debian installer
-was produced by the successful GitHub CI build. The app does not bypass DRM or
-authentication; source-site compatibility depends on yt-dlp.
+Instalador: **media-downloader-gtk_1.1.0-1_amd64.deb**.
+Sistema probado: **Ubuntu 24.04, amd64 (Intel/AMD de 64 bits)**.
 
-Known limits: playlists are limited to the first 100 entries per analysis;
-metadata unavailable from a site remains unavailable; conversions depend on the
-installed FFmpeg decoders and encoders. Unknown video codecs are only accepted
-in their reported native container; use audio extraction or a source with full
-format metadata for other choices. Download history is session-only.
+```sh
+sudo apt install ./media-downloader-gtk_1.1.0-1_amd64.deb
+```
+
+El comando también actualiza una instalación anterior. Cierra y vuelve a abrir
+la aplicación después de instalar. APT instala las dependencias necesarias.
+Se adjunta `SHA256SUMS` para verificar el archivo descargado.
+
+## Cambios
+
+- Progreso basado en los bytes acumulados de video y audio. El total estimado
+  queda fijo durante la descarga y se identifica con **≈**.
+- Verificación del formato final con FFprobe antes de marcar una tarea como
+  completada. Los archivos intermedios permanecen en una carpeta temporal.
+- Reintentos automáticos configurables de **1 a 10**, con pausas progresivas
+  para los fallos temporales de conexión, análisis y procesamiento.
+- Conversión reintentada usando los archivos descargados cuando están disponibles.
+- Numeración opcional de listas con prefijos como `001 -`, respetando la posición original.
+- Confirmación al cerrar con tareas pendientes.
+- Botón **Cancelar todas** para dos o más tareas pendientes, con confirmación.
+- Selectores de formato, calidad, reintentos y preferencias sin marcas de check.
+
+## Validación y límites
+
+Pruebas de núcleo, memoria, descarga y conversión con medios generados localmente,
+reintentos y confirmaciones de interfaz. La instalación del paquete se comprueba
+en un contenedor Ubuntu 24.04 independiente.
+
+El análisis de listas está limitado a los primeros 100 elementos. El historial
+no se conserva entre sesiones. La disponibilidad del contenido depende del
+sitio y de yt-dlp; los videos privados o inexistentes no se vuelven accesibles
+mediante reintentos. El instalador no incluye una versión para Windows o macOS.
+
+Código original bajo licencia MIT. Descarga solo contenido propio, de dominio
+público o autorizado. La aplicación no evita DRM ni restricciones de acceso.

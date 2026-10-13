@@ -242,3 +242,13 @@ close/cancel dialogs preserves work, accepted batch cancellation cancels active
 and waiting jobs, and a new download can be queued afterward. Accepting close
 with that new job pending shuts down cleanly after callbacks finish. The release
 Debian package was rebuilt.
+
+## v1.1.0 release preparation — 2026-10-12
+
+The application reports version 1.1.0 and the locally generated Debian package
+reports 1.1.0-1, amd64. All 26 release core tests pass. The current interface was
+captured from a successful local-media GUI run under an isolated X11/Xvfb display.
+Packaging now reads the version from the Debian changelog. The GitHub build also
+runs the processing/connection retry and close/batch-cancel GUI regressions before
+verifying package installation. The public installer is taken from that release
+commit's successful GitHub CI artifact, with a matching checksum attachment.
